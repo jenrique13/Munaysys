@@ -1,0 +1,13 @@
+﻿
+> frontend@0.0.0 build
+> tsc -b && vite build
+
+src/features/crm/hooks/useQuotesStore.ts(19,57): error TS6133: 'get' is declared but its value is never read.
+src/features/crm/pages/ProspectosPage.tsx(2,25): error TS6133: 'ExternalLink' is declared but its value is never read.
+src/features/crm/pages/ProspectosPage.tsx(2,61): error TS6133: 'Star' is declared but its value is never read.
+src/features/financial/hooks/useProvidersStore.ts(3,5): error TS1484: 'Provider' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/features/financial/hooks/useProvidersStore.ts(4,5): error TS1484: 'Payable' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/features/financial/hooks/useProvidersStore.ts(5,5): error TS1484: 'CreateProviderDTO' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/features/financial/hooks/useProvidersStore.ts(6,5): error TS1484: 'UpdateProviderDTO' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/features/financial/hooks/useProvidersStore.ts(7,5): error TS1484: 'CreatePayableDTO' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/features/financial/hooks/useProvidersStore.ts(8,5): error TS1484: 'UpdatePayableDTO' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.

@@ -1,0 +1,52 @@
+# Plan de Tareas - Munaysys 2.0
+
+- [ ] **Fase 1: Fundamentos**
+  - [x] Setup Frontend (React + Vite + TypeScript)
+  - [x] Implementar arquitectura Atomic Design y Feature-based
+  - [x] Configurar UI Framework (Tailwind CSS sugerido) y Rutas
+  - [x] Setup Backend (FastAPI + PostgreSQL)
+  - [x] Implementar esquema de Base de Datos y conexiones
+  - [x] Implementar Módulo de Autenticación (JWT + bcrypt) y Usuarios
+- [x] **Fase 2: CRM Core**
+  - [x] Backend: Endpoints de Leads y Oportunidades
+  - [x] Frontend: Pipeline visual Kanban (drag & drop)
+  - [x] Frontend: Vista 360 del Cliente e Interacciones
+- [x] **Fase 3: Operativo**
+  - [x] Backend: Modelos (Client, Office, Room, Membership, Amenity, Booking)
+  - [x] Backend: Schemas Pydantic y CRUD operativo
+  - [x] Backend: Endpoints FastAPI `/api/v1/operative/*`
+  - [x] Frontend: Tipos TS, Axios Service y Zustand Store
+  - [x] Frontend: Página `/clients` — Lista clientes + membresías
+  - [x] Frontend: Página `/espacios` — Catálogo oficinas por categoría
+  - [x] Frontend: Página `/rooms` — Catálogo salas con disponibilidad
+  - [x] Frontend: Página `/bookings` — Calendario interactivo
+  - [x] Frontend: Navegación (sidebar + rutas App.tsx)
+  - [/]# Mejora del Sistema de Amenidades
+
+- [x] **Backend — Actualización de Modelos y Schemas**
+    - [x] Agregar campos `price`, `category`, `description`, `is_recurring` a [Amenity](file:///d:/Proyectos/Munaysys/frontend/src/features/operative/types/index.ts#53-68).
+    - [x] Actualizar Pydantic schemas en [operative.py](file:///d:/Proyectos/Munaysys/backend/app/api/operative.py).
+- [x] **Backend — Lógica de Consumo**
+    - [x] Modificar [create_booking](file:///d:/Proyectos/Munaysys/backend/app/api/operative.py#178-192) en [crud/operative.py](file:///d:/Proyectos/Munaysys/backend/app/crud/operative.py) para descontar horas de amenidades.
+- [x] **Frontend — Tipos y Servicios**
+    - [x] Actualizar interfaz [Amenity](file:///d:/Proyectos/Munaysys/frontend/src/features/operative/types/index.ts#53-68) en [types/index.ts](file:///d:/Proyectos/Munaysys/frontend/src/types/index.ts).
+- [x] **Frontend — UI/UX Amenidades**
+    - [x] Nueva visualización de servicios activos con saldo.
+    - [x] Catálogo de compra directa en [ClientAmenitiesModal](file:///d:/Proyectos/Munaysys/frontend/src/features/operative/pages/ClientsPage.tsx#151-275).
+- [x] **Verificación**
+    - [x] Prueba E2E: Compra de pack de horas y consumo tras reserva.
+- [x] **Infraestructura**
+    - [x] Migración de DB PostgreSQL (munaysys_dev).
+    - [x] Ajuste de CORS en [main.py](file:///d:/Proyectos/Munaysys/backend/app/main.py).
+- [x] **Fase 4: Financiero**
+  - [x] Backend: Endpoints de Productos, Paquetes e Inventario
+  - [x] Backend: Endpoints Financieros (Ventas, Gastos, Recibos)
+  - [x] Frontend: Registro de Ventas y Compras
+  - [x] Frontend: Facturación y Estado de Cuenta
+- [ ] **Fase 5: Dashboards y Reportes**
+  - [ ] Backend: Queries analíticos y de reporting
+  - [ ] Frontend: Dashboard por Sede
+  - [ ] Frontend: Dashboard Gerencial Comparativo
+  - [ ] Exportación a PDF/Excel
+- [ ] **Fase 6: Testing & QA**
+- [ ] **Fase 7: Deploy & Training**
