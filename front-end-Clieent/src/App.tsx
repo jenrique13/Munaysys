@@ -7,6 +7,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { MembershipPage } from './pages/MembershipPage';
 import { StatementPage } from './pages/StatementPage';
 import { BookingPage } from './pages/BookingPage';
+import { ProfilePage } from './pages/ProfilePage';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuthStore();
@@ -39,6 +40,7 @@ function App() {
           <Route path="membership" element={<MembershipPage />} />
           <Route path="statement" element={<StatementPage />} />
           <Route path="booking" element={<BookingPage />} />
+          <Route path="profile" element={<ProfilePage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
