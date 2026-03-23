@@ -54,3 +54,22 @@ def get_target_branch_id(
     
     # Usuarios normales: siempre su propia sede, ignorando el header
     return current_user.branch_id or 0
+
+def get_current_client(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> models.Client:
+    """
+    Busca el registro de Cliente asociado al usuario actual por email.
+    """
+    client = db.query(models.Client).filter(
+        models.Client.email == current_user.email,
+        models.Client.status != "deleted"
+    ).first()
+    
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No se encontró un registro de Cliente asociado a este usuario."
+        )
+    return client

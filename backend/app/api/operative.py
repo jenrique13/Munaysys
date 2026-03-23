@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app import models
 from app.database import get_db
-from app.api.deps import get_current_user, get_target_branch_id
+from app.api.deps import get_current_user, get_target_branch_id, get_current_client
 from app.schemas import operative as schemas
 from app.crud import operative as crud
 
@@ -22,6 +22,14 @@ def read_clients(
 ):
     # If branch_id is not specified, we fetch ALL clients (unified view)
     return crud.get_clients(db, branch_id=branch_id, skip=skip, limit=limit, search=search)
+
+@router.get("/clients/me", response_model=schemas.ClientOut)
+def read_client_me(
+    db: Session = Depends(get_db),
+    current_client: models.Client = Depends(get_current_client)
+):
+    """Retorna el perfil del cliente logueado."""
+    return current_client
 
 @router.post("/clients", response_model=schemas.ClientOut)
 def create_client(

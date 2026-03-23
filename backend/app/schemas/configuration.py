@@ -32,22 +32,6 @@ class UserConfigUpdate(UserConfigBase):
     access_permissions: Optional[Dict[str, bool]] = None
     password: Optional[str] = None
 
-
-class UserConfigOut(BaseModel):
-    id: int
-    email: str
-    status: str
-    is_active: bool
-    role_id: Optional[int]
-    branch_id: Optional[int]
-    access_permissions: Optional[Dict[str, Any]] = None
-    role: Optional[RoleOut] = None
-    branch: Optional[BranchOut] = None
-
-    class Config:
-        from_attributes = True
-
-
 # --- Branches ---
 
 class BranchBase(BaseModel):
@@ -74,4 +58,19 @@ class BranchOut(BranchBase):
 
     class Config:
         from_attributes = True
+
+class UserConfigOut(BaseModel):
+    id: int
+    email: str
+    status: str
+    is_active: bool
+    role_id: Optional[int]
+    branch_id: Optional[int]
+    access_permissions: Optional[Dict[str, Any]] = None
+    role: Optional[RoleOut] = None
+    branch: Optional[BranchOut] = None
+
+    class Config:
+        from_attributes = True
+
 

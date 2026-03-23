@@ -3,6 +3,7 @@ from sqlalchemy import and_
 from app import models
 from app.schemas import operative as schemas
 from datetime import datetime
+from typing import Optional
 
 
 # ── CLIENTS ────────────────────────────────────────────────
