@@ -102,6 +102,8 @@ class Package(PackageBase):
 
 class ReceiptBase(BaseModel):
     amount: float
+    exchange_rate: Optional[float] = None
+    exchange_currency: str = "usd"
     type: str = "income"  # income, expense
     payment_method: str  # Cash, Zelle, Banesco (VE), etc.
     reference: Optional[str] = None
@@ -248,9 +250,13 @@ class Purchase(PurchaseBase):
 class ExpenseBase(BaseModel):
     branch_id: int
     amount: float
+    exchange_rate: Optional[float] = None
+    exchange_currency: str = "usd"
     category: str
     description: Optional[str] = None
     provider: Optional[str] = None
+    provider_id: Optional[int] = None
+    payment_method: Optional[str] = None
 
 class ExpenseCreate(ExpenseBase):
     pass
@@ -271,6 +277,9 @@ class CashMovementBase(BaseModel):
     type: str  # income, expense
     category: str
     description: Optional[str] = None
+    client_name: Optional[str] = None
+    provider_name: Optional[str] = None
+    payment_method: Optional[str] = None
 
 class CashMovementCreate(CashMovementBase):
     pass

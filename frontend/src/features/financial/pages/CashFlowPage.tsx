@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useFinancialStore } from '../hooks/useFinancialStore';
+import { useSystemStore } from '../../system/hooks/useSystemStore';
+import { useOperativeStore } from '../../operative/hooks/useOperativeStore';
+import { useProvidersStore } from '../hooks/useProvidersStore';
+import { formatCurrency, formatBs } from '../../../utils/format';
 import {
     Plus, Search, ArrowUpCircle, ArrowDownCircle, History,
     Filter, DollarSign, Calendar, Settings
@@ -8,9 +12,10 @@ import CategoryManagementModal from '../components/CategoryManagementModal';
 
 const CashFlowPage: React.FC = () => {
     const {
-        cashMovements, financialSummary, cashCategories, isLoading,
+        cashMovements, financialSummary, cashCategories, isLoading, paymentMethods,
         fetchCashMovements, fetchFinancialSummary, fetchCashCategories, createCashMovement
     } = useFinancialStore();
+    const { bcvRateUsd } = useSystemStore();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
@@ -22,18 +27,29 @@ const CashFlowPage: React.FC = () => {
         type: 'income' | 'expense';
         category: string;
         description: string;
+        client_name?: string;
+        provider_name?: string;
+        payment_method?: string;
     }>({
         amount: 0,
         type: 'income',
         category: '',
-        description: ''
+        description: '',
+        client_name: '',
+        provider_name: '',
+        payment_method: ''
     });
+
+    const { clients, fetchClients } = useOperativeStore();
+    const { providers, fetchProviders } = useProvidersStore();
 
     useEffect(() => {
         fetchCashMovements();
         fetchFinancialSummary();
         fetchCashCategories();
-    }, [fetchCashMovements, fetchFinancialSummary, fetchCashCategories]);
+        fetchClients();
+        fetchProviders();
+    }, [fetchCashMovements, fetchFinancialSummary, fetchCashCategories, fetchClients, fetchProviders]);
 
     const filteredMovements = cashMovements.filter(m => {
         const matchesSearch = m.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -47,7 +63,7 @@ const CashFlowPage: React.FC = () => {
         const success = await createCashMovement(formData);
         if (success) {
             setIsModalOpen(false);
-            setFormData({ amount: 0, type: 'income', category: '', description: '' });
+            setFormData({ amount: 0, type: 'income', category: '', description: '', client_name: '', provider_name: '', payment_method: '' });
         }
     };
 
@@ -68,9 +84,16 @@ const CashFlowPage: React.FC = () => {
                         </div>
                         <div>
                             <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider text-left">Efectivo en Caja</p>
-                            <p className="text-xl font-bold text-gray-900">
-                                ${financialSummary?.current_cash.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
-                            </p>
+                            <div className="flex items-baseline gap-2">
+                                <p className="text-xl font-bold text-gray-900">
+                                    {formatCurrency(financialSummary?.current_cash || 0)}
+                                </p>
+                                {bcvRateUsd && (
+                                    <p className="text-sm font-medium text-gray-500">
+                                        {formatBs(financialSummary?.current_cash || 0, bcvRateUsd)}
+                                    </p>
+                                )}
+                            </div>
                         </div>
                     </div>
                     <button
@@ -130,7 +153,7 @@ const CashFlowPage: React.FC = () => {
                             <thead className="bg-gray-50">
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría / Entidad</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Monto</th>
                                 </tr>
@@ -145,22 +168,37 @@ const CashFlowPage: React.FC = () => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className="px-2 py-1 text-[10px] font-bold uppercase rounded-md bg-gray-100 text-gray-600">
+                                            <span className="px-2 py-1 text-[10px] font-bold uppercase rounded-md bg-gray-100 text-gray-600 block w-max mb-1">
                                                 {m.category}
                                             </span>
+                                            {(m.client_name || m.provider_name) && (
+                                                <div className="text-xs text-gray-500 font-medium">
+                                                    {m.client_name ? `Cliente: ${m.client_name}` : `Prov: ${m.provider_name}`}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-700">
                                             {m.description || '-'}
+                                            {m.payment_method && (
+                                                <span className="block text-[10px] text-gray-400 mt-1 uppercase font-bold tracking-widest">{m.payment_method}</span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <span className={`text-sm font-bold ${m.type === 'income' ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                    {m.type === 'income' ? '+' : '-'}${m.amount.toFixed(2)}
-                                                </span>
-                                                {m.type === 'income' ?
-                                                    <ArrowUpCircle size={16} className="text-emerald-500" /> :
-                                                    <ArrowDownCircle size={16} className="text-red-500" />
-                                                }
+                                            <div className="flex flex-col items-end">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <span className={`text-sm font-bold ${m.type === 'income' ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                        {m.type === 'income' ? '+' : '-'}{formatCurrency(m.amount)}
+                                                    </span>
+                                                    {m.type === 'income' ?
+                                                        <ArrowUpCircle size={16} className="text-emerald-500" /> :
+                                                        <ArrowDownCircle size={16} className="text-red-500" />
+                                                    }
+                                                </div>
+                                                {bcvRateUsd && (
+                                                    <span className="text-xs text-gray-400 font-medium mt-1">
+                                                        {formatBs(m.amount, bcvRateUsd)}
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -240,6 +278,53 @@ const CashFlowPage: React.FC = () => {
                                         <option value="" disabled>No hay categorías para este tipo</option>
                                     )}
                                     <option value="Otro">Otro</option>
+                                </select>
+                            </div>
+
+                            {formData.type === 'income' ? (
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cliente (Búsqueda)</label>
+                                    <input
+                                        list="clients-list"
+                                        type="text"
+                                        value={formData.client_name || ''}
+                                        onChange={(e) => setFormData({ ...formData, client_name: e.target.value })}
+                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        placeholder="Escribe o selecciona un cliente registrados"
+                                    />
+                                    <datalist id="clients-list">
+                                        {clients.map(c => <option key={c.id} value={c.name} />)}
+                                    </datalist>
+                                </div>
+                            ) : (
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Proveedor (Búsqueda)</label>
+                                    <input
+                                        list="providers-list"
+                                        type="text"
+                                        value={formData.provider_name || ''}
+                                        onChange={(e) => setFormData({ ...formData, provider_name: e.target.value })}
+                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        placeholder="Escribe o selecciona un proveedor registrado"
+                                    />
+                                    <datalist id="providers-list">
+                                        {providers.map(p => <option key={p.id} value={p.name} />)}
+                                    </datalist>
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Método de Pago</label>
+                                <select
+                                    required
+                                    value={formData.payment_method || ''}
+                                    onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                                >
+                                    <option value="" disabled>Seleccione método...</option>
+                                    {paymentMethods.filter(m => m.is_active).map(m => (
+                                        <option key={m.id} value={m.name}>{m.name}</option>
+                                    ))}
                                 </select>
                             </div>
 

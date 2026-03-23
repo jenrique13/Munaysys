@@ -3,6 +3,8 @@ import { useAuthStore } from '../../auth/hooks/useAuthStore';
 import { useFinancialStore } from '../hooks/useFinancialStore';
 import { useInventoryStore } from '../hooks/useInventoryStore';
 import { useOperativeStore } from '../../operative/hooks/useOperativeStore';
+import { useSystemStore } from '../../system/hooks/useSystemStore';
+import { formatBs } from '../../../utils/format';
 import type { Orden, Pedido } from '../types';
 import type { Amenity } from '../../operative/types';
 import { operativeService } from '../../operative/services/operative.service';
@@ -40,9 +42,11 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 
 const PaymentModal: React.FC<{ order: Orden; onClose: () => void }> = ({ order, onClose }) => {
     const { createReceipt, isLoading, paymentMethods } = useFinancialStore();
+    const { bcvRateUsd, bcvRateEur } = useSystemStore();
     const [amount, setAmount] = useState<number>(order.total - order.receipts.reduce((sum, r) => sum + r.amount, 0));
     const [method, setMethod] = useState<string>(paymentMethods.find(m => m.is_active)?.name || "Efectivo");
     const [reference, setReference] = useState('');
+    const [refCurrency, setRefCurrency] = useState<'usd' | 'eur'>('usd');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -52,7 +56,9 @@ const PaymentModal: React.FC<{ order: Orden; onClose: () => void }> = ({ order, 
             amount,
             type: "income",
             payment_method: method as any,
-            reference
+            reference,
+            exchange_rate: (refCurrency === 'usd' ? bcvRateUsd : bcvRateEur) ?? undefined,
+            exchange_currency: refCurrency
         });
         if (ok) onClose();
     };
@@ -90,6 +96,25 @@ const PaymentModal: React.FC<{ order: Orden; onClose: () => void }> = ({ order, 
                         <label className="block text-sm font-medium text-gray-700 mb-1">Referencia</label>
                         <input value={reference} onChange={e => setReference(e.target.value)} placeholder="Nro de recibo o transferencia..."
                             className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+
+                    <div className="bg-gray-50 border border-gray-200 p-3 rounded-lg">
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Tasa de Cambio a Aplicar</label>
+                        <div className="flex gap-2">
+                            <button type="button" onClick={() => setRefCurrency('usd')} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${refCurrency === 'usd' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}>Dólar (USD)</button>
+                            <button type="button" onClick={() => setRefCurrency('eur')} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${refCurrency === 'eur' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}>Euro (EUR)</button>
+                        </div>
+                        <div className="mt-3 flex justify-between items-center px-1">
+                            <span className="text-sm text-gray-600 font-medium">Equivalente a cobrar:</span>
+                            <div className="text-right">
+                                <span className="text-lg font-bold text-gray-900 block">
+                                    {formatBs(amount, refCurrency === 'usd' ? bcvRateUsd : bcvRateEur)}
+                                </span>
+                                <span className="text-[10px] text-gray-400 font-bold tracking-wide">
+                                    TASA: {refCurrency === 'usd' ? bcvRateUsd : bcvRateEur} BS/{refCurrency.toUpperCase()}
+                                </span>
+                            </div>
+                        </div>
                     </div>
                     <div className="flex justify-end gap-3 pt-4">
                         <button type="button" onClick={onClose} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">Cancelar</button>
@@ -881,6 +906,7 @@ const OrderDetailModal: React.FC<{ order: Orden; clientName: string; onClose: ()
 const OrdersPage: React.FC = () => {
     const { selectedBranchId } = useAuthStore();
     const { orders, fetchOrders, fetchProducts, fetchPaymentMethods, isLoading } = useFinancialStore();
+    const { bcvRateUsd } = useSystemStore();
     const { clients, fetchClients } = useOperativeStore();
     const [search, setSearch] = useState('');
     const [showNew, setShowNew] = useState(false);
@@ -977,8 +1003,14 @@ const OrdersPage: React.FC = () => {
                                             <td className="py-3 px-4 text-sm text-gray-500">#{o.id}</td>
                                             <td className="py-3 px-4 font-medium text-gray-800 text-sm">{getClientName(o.client_id)}</td>
                                             <td className="py-3 px-4 text-xs text-gray-500">{new Date(o.date).toLocaleDateString()}</td>
-                                            <td className="py-3 px-4 font-bold text-gray-900">${o.total.toFixed(2)}</td>
-                                            <td className="py-3 px-4 text-sm text-emerald-600 font-medium">${paidAmount.toFixed(2)}</td>
+                                            <td className="py-3 px-4">
+                                                <div className="font-bold text-gray-900">${o.total.toFixed(2)}</div>
+                                                {bcvRateUsd && <div className="text-xs text-gray-500 font-medium mt-0.5">{formatBs(o.total, bcvRateUsd)}</div>}
+                                            </td>
+                                            <td className="py-3 px-4">
+                                                <div className="text-sm text-emerald-600 font-medium">${paidAmount.toFixed(2)}</div>
+                                                {bcvRateUsd && <div className="text-xs text-emerald-500 mt-0.5">{formatBs(paidAmount, bcvRateUsd)}</div>}
+                                            </td>
                                             <td className="py-3 px-4"><StatusBadge status={o.status} /></td>
                                             <td className="py-3 px-4 text-right">
                                                 <div className="flex justify-end gap-1.5 items-center">

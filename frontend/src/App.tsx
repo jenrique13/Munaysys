@@ -32,6 +32,8 @@ import LoginPage from './features/auth/pages/LoginPage';
 import ReportesPage from './features/reports/pages/ReportesPage';
 import { useAuthStore } from './features/auth/hooks/useAuthStore';
 
+import { useSystemStore } from './features/system/hooks/useSystemStore';
+
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuthStore();
   if (!user) {
@@ -43,19 +45,23 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const { fetchCurrentUser } = useAuthStore();
+  const { fetchBcvRates } = useSystemStore();
 
   useEffect(() => {
     const initAuth = async () => {
       try {
-        await fetchCurrentUser();
+        await Promise.all([
+          fetchCurrentUser(),
+          fetchBcvRates()
+        ]);
       } catch (e) {
-        console.error("No se pudo iniciar sesion", e);
+        console.error("No se pudo iniciar sesion o cargar conf", e);
       } finally {
         setIsAuthReady(true);
       }
     };
     initAuth();
-  }, [fetchCurrentUser]);
+  }, [fetchCurrentUser, fetchBcvRates]);
 
   if (!isAuthReady) {
     return (

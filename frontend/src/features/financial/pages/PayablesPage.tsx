@@ -1,13 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { useProvidersStore } from '../hooks/useProvidersStore';
+import { useSystemStore } from '../../system/hooks/useSystemStore';
+import { useFinancialStore } from '../hooks/useFinancialStore';
+import { formatCurrency, formatBs } from '../../../utils/format';
 import { Plus, Search, Calendar, CheckCircle } from 'lucide-react';
 import type { CreatePayableDTO } from '../services/providers.service';
+import type { Payable } from '../services/providers.service';
 
 const PayablesPage: React.FC = () => {
     const { payables, providers, isLoading, fetchPayables, fetchProviders, createPayable, updatePayable } = useProvidersStore();
+    const { paymentMethods } = useFinancialStore();
+    const { bcvRateUsd, bcvRateEur } = useSystemStore();
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid'>('all');
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [refCurrency, setRefCurrency] = useState<'usd' | 'eur'>('usd');
+    const [payingPayable, setPayingPayable] = useState<Payable | null>(null);
+    const [paymentMethod, setPaymentMethod] = useState<string>('');
 
     const [formData, setFormData] = useState<Omit<CreatePayableDTO, 'branch_id'>>({
         provider_id: 0,
@@ -46,12 +55,24 @@ const PayablesPage: React.FC = () => {
         }
     };
 
-    const handleMarkAsPaid = async (id: number) => {
-        if (window.confirm('¿Confirmar pago de esta cuenta/factura?')) {
-            await updatePayable(id, {
+    const handleOpenPayment = (payable: Payable) => {
+        setPayingPayable(payable);
+        setPaymentMethod(paymentMethods.find(m => m.is_active)?.name || "Efectivo");
+    };
+
+    const handleConfirmPayment = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!payingPayable) return;
+        try {
+            await updatePayable(payingPayable.id, {
                 status: 'paid',
-                paid_date: new Date().toISOString()
+                paid_date: new Date().toISOString(),
+                payment_method: paymentMethod as any
             });
+            setPayingPayable(null);
+        } catch (error) {
+            console.error(error);
+            alert("Error al confirmar el pago");
         }
     };
 
@@ -67,6 +88,7 @@ const PayablesPage: React.FC = () => {
             expense_id: null,
             purchase_id: null
         });
+        setRefCurrency('usd');
     };
 
     const isOverdue = (dateString: string) => {
@@ -171,8 +193,9 @@ const PayablesPage: React.FC = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                             {payable.reference || '-'}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            ${payable.amount.toFixed(2)}
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                                            <div className="font-bold text-gray-900">{formatCurrency(payable.amount)}</div>
+                                            {(bcvRateUsd || bcvRateEur) && <div className="text-xs text-gray-500 font-medium mt-0.5">{formatBs(payable.amount, bcvRateUsd || bcvRateEur)}</div>}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${payable.status === 'paid' ? 'bg-green-100 text-green-800' :
@@ -184,7 +207,7 @@ const PayablesPage: React.FC = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             {payable.status === 'pending' && (
                                                 <button
-                                                    onClick={() => handleMarkAsPaid(payable.id)}
+                                                    onClick={() => handleOpenPayment(payable)}
                                                     className="text-green-600 hover:text-green-900 flex items-center justify-end w-full"
                                                     title="Marcar como pagado"
                                                 >
@@ -261,7 +284,7 @@ const PayablesPage: React.FC = () => {
                                                 min="0"
                                                 required
                                                 value={formData.amount || ''}
-                                                onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) })}
+                                                onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
                                                 className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                             />
                                         </div>
@@ -274,6 +297,25 @@ const PayablesPage: React.FC = () => {
                                                 onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
                                                 className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                             />
+                                        </div>
+                                    </div>
+                                    {/* Rate Selection */}
+                                    <div className="bg-gray-50 border border-gray-200 p-3 rounded-lg mt-2">
+                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Tasa de Cambio a Aplicar</label>
+                                        <div className="flex gap-2">
+                                            <button type="button" onClick={() => setRefCurrency('usd')} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${refCurrency === 'usd' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}>Dólar (USD)</button>
+                                            <button type="button" onClick={() => setRefCurrency('eur')} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${refCurrency === 'eur' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}>Euro (EUR)</button>
+                                        </div>
+                                        <div className="mt-3 flex justify-between items-center px-1">
+                                            <span className="text-sm text-gray-600 font-medium">Equivalente a pagar:</span>
+                                            <div className="text-right">
+                                                <span className="text-lg font-bold text-gray-900 block">
+                                                    {formatBs(formData.amount, refCurrency === 'usd' ? bcvRateUsd : bcvRateEur)}
+                                                </span>
+                                                <span className="text-[10px] text-gray-400 font-bold tracking-wide">
+                                                    TASA: {refCurrency === 'usd' ? bcvRateUsd : bcvRateEur} BS/{refCurrency.toUpperCase()}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                 </form>
@@ -299,7 +341,38 @@ const PayablesPage: React.FC = () => {
                     </div>
                 </div>
             )}
-            <div className={`${isModalOpen ? 'opacity-25 fixed inset-0 z-40 bg-black' : 'hidden'}`}></div>
+            
+            {/* Modal Confirmar Pago */}
+            {payingPayable && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden z-10">
+                        <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
+                            <h2 className="font-bold text-gray-800 text-lg flex items-center gap-2">Confirmar Pago</h2>
+                            <button onClick={() => setPayingPayable(null)} className="text-gray-400 hover:bg-gray-100 p-1 rounded-full"><span className="text-xl leading-none">&times;</span></button>
+                        </div>
+                        <form onSubmit={handleConfirmPayment} className="p-6 space-y-4">
+                            <div className="bg-blue-50 text-blue-800 text-xs p-3 rounded-lg border border-blue-100 mb-4">
+                                <p>Deuda a abonar: <strong>${payingPayable.amount.toFixed(2)}</strong></p>
+                                <p>Proveedor: <strong>{payingPayable.provider?.name || 'Local'}</strong></p>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Cuenta/Método de Pago</label>
+                                <select required value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}
+                                    className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
+                                    {paymentMethods.filter(m => m.is_active).map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                                    {paymentMethods.filter(m => m.is_active).length === 0 && <option value="Efectivo">Efectivo (Default)</option>}
+                                </select>
+                            </div>
+                            <div className="flex justify-end gap-3 pt-4">
+                                <button type="button" onClick={() => setPayingPayable(null)} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">Cancelar</button>
+                                <button type="submit" className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Confirmar Pago</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+            
+            <div className={`${isModalOpen || payingPayable ? 'opacity-25 fixed inset-0 z-40 bg-black' : 'hidden'}`}></div>
         </div>
     );
 };

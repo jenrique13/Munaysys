@@ -83,6 +83,8 @@ export interface Receipt {
     type: "income" | "expense";
     payment_method: PaymentMethod;
     reference?: string;
+    exchange_rate?: number;
+    exchange_currency?: string;
 }
 
 export interface Pedido {
@@ -150,6 +152,10 @@ export interface Expense {
     category: string;
     description?: string;
     provider?: string;
+    provider_id?: number | null;
+    payment_method?: string;
+    exchange_rate?: number;
+    exchange_currency?: string;
 }
 
 export interface ClientStatement {
@@ -177,6 +183,9 @@ export interface CashMovement {
     type: "income" | "expense";
     category: string;
     description?: string;
+    client_name?: string;
+    provider_name?: string;
+    payment_method?: string;
     date: string;
 }
 

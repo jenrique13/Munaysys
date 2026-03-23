@@ -74,11 +74,33 @@ def update_payable(db: Session, payable_id: int, obj_in: schemas.PayableUpdate) 
     db_obj = get_payable(db, payable_id)
     if not db_obj:
         return None
+        
+    was_pending = db_obj.status in ["pending", "partial"]
+    
     obj_data = jsonable_encoder(db_obj)
     update_data = obj_in.model_dump(exclude_unset=True)
     for field in obj_data:
         if field in update_data:
             setattr(db_obj, field, update_data[field])
+            
+    # Auto-generate CashMovement when marking a Debt as Paid
+    if was_pending and db_obj.status == "paid":
+        provider_name = None
+        if db_obj.provider_id:
+            prov = db.query(models.Provider).filter(models.Provider.id == db_obj.provider_id).first()
+            if prov: provider_name = prov.name
+            
+        cm = models.CashMovement(
+            branch_id=db_obj.branch_id,
+            amount=db_obj.amount,
+            type="expense",
+            category="Pago de Factura/Deuda",
+            description=db_obj.reference or f"Pago Cta. #{db_obj.id}",
+            provider_name=provider_name,
+            payment_method=db_obj.payment_method
+        )
+        db.add(cm)
+            
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)

@@ -27,6 +27,7 @@ export interface Payable {
     purchase_id: number | null;
     branch_id: number;
     provider?: Provider;
+    payment_method?: string;
 }
 
 export type CreatePayableDTO = Omit<Payable, 'id' | 'branch_id' | 'provider'>;

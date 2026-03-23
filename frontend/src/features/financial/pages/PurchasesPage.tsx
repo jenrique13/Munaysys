@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../../auth/hooks/useAuthStore';
 import { useFinancialStore } from '../hooks/useFinancialStore';
 import { useProvidersStore } from '../hooks/useProvidersStore';
-import type { Purchase, PurchaseDetail, Product, PaymentMethod } from '../types';
+import { useSystemStore } from '../../system/hooks/useSystemStore';
+import { formatCurrency, formatBs } from '../../../utils/format';
+import type { Purchase, PurchaseDetail, Product } from '../types';
 import { ShoppingCart, Plus, Search, DollarSign, X, Receipt as ReceiptIcon, Download } from 'lucide-react';
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
@@ -20,16 +22,13 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
     );
 };
 
-const PAYMENT_METHODS: PaymentMethod[] = [
-    "Efectivo", "Mercantil (Venezuela)", "Banesco (Venezuela)", "BNC",
-    "Mercantil (Panamá)", "Banesco (Panamá)", "Facebank", "Zelle", "PayPal", "Intercambio"
-];
-
 const PaymentModal: React.FC<{ purchase: Purchase; onClose: () => void }> = ({ purchase, onClose }) => {
-    const { createReceipt, isLoading } = useFinancialStore();
+    const { createReceipt, isLoading, paymentMethods } = useFinancialStore();
+    const { bcvRateUsd, bcvRateEur } = useSystemStore();
     const [amount, setAmount] = useState<number>(purchase.total - purchase.receipts.reduce((sum, r) => sum + r.amount, 0));
-    const [method, setMethod] = useState<PaymentMethod>("Efectivo");
+    const [method, setMethod] = useState<string>(paymentMethods.find(m => m.is_active)?.name || "Efectivo");
     const [reference, setReference] = useState('');
+    const [refCurrency, setRefCurrency] = useState<'usd' | 'eur'>('usd');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -37,8 +36,10 @@ const PaymentModal: React.FC<{ purchase: Purchase; onClose: () => void }> = ({ p
             purchase_id: purchase.id,
             amount,
             type: "expense",
-            payment_method: method,
-            reference
+            payment_method: method as any,
+            reference,
+            exchange_rate: (refCurrency === 'usd' ? bcvRateUsd : bcvRateEur) ?? undefined,
+            exchange_currency: refCurrency
         });
         if (ok) onClose();
     };
@@ -64,11 +65,32 @@ const PaymentModal: React.FC<{ purchase: Purchase; onClose: () => void }> = ({ p
                         <input type="number" step="0.01" max={remaining} required value={amount} onChange={e => setAmount(parseFloat(e.target.value) || 0)}
                             className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
                     </div>
+
+                    {/* Rate Selection */}
+                    <div className="bg-gray-50 border border-gray-200 p-3 rounded-lg">
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Tasa de Cambio a Aplicar</label>
+                        <div className="flex gap-2">
+                            <button type="button" onClick={() => setRefCurrency('usd')} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${refCurrency === 'usd' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}>Dólar (USD)</button>
+                            <button type="button" onClick={() => setRefCurrency('eur')} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${refCurrency === 'eur' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}>Euro (EUR)</button>
+                        </div>
+                        <div className="mt-3 flex justify-between items-center px-1">
+                            <span className="text-sm text-gray-600 font-medium">Equivalente a pagar:</span>
+                            <div className="text-right">
+                                <span className="text-lg font-bold text-gray-900 block">
+                                    {formatBs(amount, refCurrency === 'usd' ? bcvRateUsd : bcvRateEur)}
+                                </span>
+                                <span className="text-[10px] text-gray-400 font-bold tracking-wide">
+                                    TASA: {refCurrency === 'usd' ? bcvRateUsd : bcvRateEur} BS/{refCurrency.toUpperCase()}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Cuenta/Método de Pago</label>
-                        <select value={method} onChange={e => setMethod(e.target.value as PaymentMethod)}
+                        <select value={method} onChange={e => setMethod(e.target.value)}
                             className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500">
-                            {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+                            {paymentMethods.filter(m => m.is_active).map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                            {paymentMethods.filter(m => m.is_active).length === 0 && <option value="Efectivo">Efectivo (Default)</option>}
                         </select>
                     </div>
                     <div>
@@ -279,6 +301,7 @@ const NewPurchaseModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 const PurchasesPage: React.FC = () => {
     const { selectedBranchId } = useAuthStore();
     const { purchases, fetchPurchases, fetchProducts, isLoading } = useFinancialStore();
+    const { bcvRateUsd } = useSystemStore();
     const [search, setSearch] = useState('');
     const [showNew, setShowNew] = useState(false);
     const [payPurchase, setPayPurchase] = useState<Purchase | null>(null);
@@ -361,8 +384,14 @@ const PurchasesPage: React.FC = () => {
                                             <td className="py-3 px-4 text-sm text-gray-500">#{p.id}</td>
                                             <td className="py-3 px-4 font-medium text-gray-800 text-sm">{p.provider_name}</td>
                                             <td className="py-3 px-4 text-xs text-gray-500">{new Date(p.date).toLocaleDateString()}</td>
-                                            <td className="py-3 px-4 font-bold text-gray-900">${p.total.toFixed(2)}</td>
-                                            <td className="py-3 px-4 text-sm text-emerald-600 font-medium">${paidAmount.toFixed(2)}</td>
+                                            <td className="py-3 px-4">
+                                                <div className="font-bold text-gray-900">{formatCurrency(p.total)}</div>
+                                                {bcvRateUsd && <div className="text-xs text-gray-500 font-medium mt-0.5">{formatBs(p.total, bcvRateUsd)}</div>}
+                                            </td>
+                                            <td className="py-3 px-4">
+                                                <div className="text-sm text-emerald-600 font-medium">{formatCurrency(paidAmount)}</div>
+                                                {bcvRateUsd && <div className="text-xs text-emerald-500 mt-0.5">{formatBs(paidAmount, bcvRateUsd)}</div>}
+                                            </td>
                                             <td className="py-3 px-4"><StatusBadge status={p.status} /></td>
                                             <td className="py-3 px-4 text-right">
                                                 <button

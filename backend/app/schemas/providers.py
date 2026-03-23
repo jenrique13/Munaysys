@@ -42,6 +42,7 @@ class PayableBase(BaseModel):
     status: Optional[str] = "pending"  # pending, paid, cancelled
     expense_id: Optional[int] = None
     purchase_id: Optional[int] = None
+    payment_method: Optional[str] = None
 
 class PayableCreate(PayableBase):
     branch_id: int = 1
@@ -52,6 +53,7 @@ class PayableUpdate(BaseModel):
     due_date: Optional[datetime] = None
     status: Optional[str] = None
     paid_date: Optional[datetime] = None
+    payment_method: Optional[str] = None
 
 class PayableInDBBase(PayableBase):
     id: int

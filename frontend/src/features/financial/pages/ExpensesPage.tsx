@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../../auth/hooks/useAuthStore';
 import { useFinancialStore } from '../hooks/useFinancialStore';
+import { useProvidersStore } from '../hooks/useProvidersStore';
+import { useSystemStore } from '../../system/hooks/useSystemStore';
+import { formatCurrency, formatBs } from '../../../utils/format';
 
 import { Wallet, Plus, Search, Tag, X, Download } from 'lucide-react';
 
@@ -8,13 +11,21 @@ import { Wallet, Plus, Search, Tag, X, Download } from 'lucide-react';
 
 const NewExpenseModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     const { selectedBranchId } = useAuthStore();
-    const { createExpense, isLoading, cashCategories } = useFinancialStore();
+    const { createExpense, isLoading, cashCategories, paymentMethods } = useFinancialStore();
+    const { providers, fetchProviders } = useProvidersStore();
+    const { bcvRateUsd, bcvRateEur } = useSystemStore();
+
+    useEffect(() => {
+        fetchProviders();
+    }, [fetchProviders]);
 
     const [amount, setAmount] = useState<number>(0);
     const expenseCategories = cashCategories.filter(c => c.type === 'expense' && c.is_active);
     const [category, setCategory] = useState<string>(expenseCategories[0]?.name || "Otros Gastos Operativos");
     const [description, setDescription] = useState('');
-    const [provider, setProvider] = useState('');
+    const [providerId, setProviderId] = useState<number | ''>('');
+    const [method, setMethod] = useState<string>(paymentMethods.find(m => m.is_active)?.name || "Efectivo");
+    const [refCurrency, setRefCurrency] = useState<'usd' | 'eur'>('usd');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -25,7 +36,11 @@ const NewExpenseModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             amount,
             category,
             description,
-            provider
+            provider_id: providerId ? Number(providerId) : undefined,
+            provider: providerId ? providers.find(p => p.id === Number(providerId))?.name : undefined,
+            payment_method: method,
+            exchange_rate: (refCurrency === 'usd' ? bcvRateUsd : bcvRateEur) ?? undefined,
+            exchange_currency: refCurrency
         });
         if (ok) onClose();
     };
@@ -54,15 +69,47 @@ const NewExpenseModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                         <input type="number" step="0.01" min="0" required value={amount} onChange={e => setAmount(parseFloat(e.target.value) || 0)}
                             className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
                     </div>
+
+                    {/* Rate Selection */}
+                    <div className="bg-gray-50 border border-gray-200 p-3 rounded-lg">
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Tasa de Cambio a Aplicar</label>
+                        <div className="flex gap-2">
+                            <button type="button" onClick={() => setRefCurrency('usd')} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${refCurrency === 'usd' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}>Dólar (USD)</button>
+                            <button type="button" onClick={() => setRefCurrency('eur')} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${refCurrency === 'eur' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}>Euro (EUR)</button>
+                        </div>
+                        <div className="mt-3 flex justify-between items-center px-1">
+                            <span className="text-sm text-gray-600 font-medium">Equivalente a pagar:</span>
+                            <div className="text-right">
+                                <span className="text-lg font-bold text-gray-900 block">
+                                    {formatBs(amount, refCurrency === 'usd' ? bcvRateUsd : bcvRateEur)}
+                                </span>
+                                <span className="text-[10px] text-gray-400 font-bold tracking-wide">
+                                    TASA: {refCurrency === 'usd' ? bcvRateUsd : bcvRateEur} BS/{refCurrency.toUpperCase()}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Descripción / Notas</label>
                         <input value={description} onChange={e => setDescription(e.target.value)} placeholder="Ej. Pago de servicio eléctrico..."
                             className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Entidad / Proveedor (Opcional)</label>
-                        <input value={provider} onChange={e => setProvider(e.target.value)} placeholder="Ej. Corpoelec"
-                            className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Entidad / Proveedor</label>
+                        <select required value={providerId} onChange={e => setProviderId(e.target.value === '' ? '' : Number(e.target.value))}
+                            className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="" disabled>Seleccione proveedor...</option>
+                            {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Cuenta/Método de Pago</label>
+                        <select required value={method} onChange={e => setMethod(e.target.value)}
+                            className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500">
+                            {paymentMethods.filter(m => m.is_active).map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                            {paymentMethods.filter(m => m.is_active).length === 0 && <option value="Efectivo">Efectivo (Default)</option>}
+                        </select>
                     </div>
                     <div className="flex justify-end gap-3 pt-4 border-t">
                         <button type="button" onClick={onClose} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">Cancelar</button>
@@ -79,6 +126,7 @@ const NewExpenseModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 const ExpensesPage: React.FC = () => {
     const { selectedBranchId } = useAuthStore();
     const { expenses, fetchExpenses, fetchCashCategories, isLoading } = useFinancialStore();
+    const { bcvRateUsd } = useSystemStore();
     const [search, setSearch] = useState('');
     const [showNew, setShowNew] = useState(false);
 
@@ -133,7 +181,10 @@ const ExpensesPage: React.FC = () => {
                 </div>
                 <div className="flex gap-4 items-center">
                     <span className="text-sm font-medium text-gray-500">Total listado:</span>
-                    <span className="px-3 py-1 bg-red-50 text-red-700 rounded font-bold border border-red-100">${totalExpenses.toFixed(2)}</span>
+                    <div className="px-3 py-1.5 bg-red-50 text-red-700 rounded-lg font-bold border border-red-100 flex items-center gap-2">
+                        <span>{formatCurrency(totalExpenses)}</span>
+                        {bcvRateUsd && <span className="text-xs font-medium text-red-500">| {formatBs(totalExpenses, bcvRateUsd)}</span>}
+                    </div>
                 </div>
             </div>
 
@@ -170,7 +221,10 @@ const ExpensesPage: React.FC = () => {
                                         <td className="py-3 px-4 font-medium text-gray-800 text-sm">{e.description || '-'}</td>
                                         <td className="py-3 px-4 text-sm text-gray-600">{e.provider || '-'}</td>
                                         <td className="py-3 px-4 text-xs text-gray-500">{new Date(e.date).toLocaleDateString()}</td>
-                                        <td className="py-3 px-4 font-bold text-red-600 text-right">-${e.amount.toFixed(2)}</td>
+                                        <td className="py-3 px-4 text-right">
+                                            <div className="font-bold text-red-600">-{formatCurrency(e.amount)}</div>
+                                            {bcvRateUsd && <div className="text-xs text-red-400 font-medium mt-0.5">{formatBs(e.amount, bcvRateUsd)}</div>}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>

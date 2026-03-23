@@ -26,3 +26,14 @@ def mark_as_read(
     if not crud_sys.mark_notification_read(db=db, notification_id=notif_id):
         raise HTTPException(status_code=404, detail="Notification not found")
     return {"ok": True}
+
+@router.get("/bcv-rate")
+async def get_bcv_rate():
+    try:
+        from currency_rate_bcv import Currency
+        currency = Currency()
+        usd_rate = await currency.getDollar
+        eur_rate = await currency.getEuro
+        return {"usd": usd_rate, "eur": eur_rate}
+    except Exception as e:
+        return {"usd": 0, "eur": 0, "error": str(e)}

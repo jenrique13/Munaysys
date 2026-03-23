@@ -1,5 +1,7 @@
 import React, { useEffect } from 'react';
 import { useDashboardStore } from '../hooks/useDashboardStore';
+import { useSystemStore } from '../../system/hooks/useSystemStore';
+import { formatCurrency, formatBs } from '../../../utils/format';
 import { Users, Landmark, Wallet, CalendarDays, TrendingUp, DollarSign, DoorOpen } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -8,6 +10,7 @@ import {
 
 export const DashboardPage: React.FC = () => {
     const { kpis, revenueTrend, occupancyStats, sedePerformance, isLoading, error, fetchDashboardData } = useDashboardStore();
+    const { bcvRateUsd } = useSystemStore();
 
     useEffect(() => {
         fetchDashboardData();
@@ -31,13 +34,7 @@ export const DashboardPage: React.FC = () => {
         );
     }
 
-    const formatCurrency = (value: number) => {
-        return new Intl.NumberFormat('es-CO', {
-            style: 'currency',
-            currency: 'USD',
-            minimumFractionDigits: 0
-        }).format(value);
-    };
+    // Using formatCurrency from utils
 
     return (
         <div className="p-8 pb-20 bg-slate-50 min-h-full">
@@ -78,8 +75,9 @@ export const DashboardPage: React.FC = () => {
                                 <Landmark size={16} />
                             </div>
                         </div>
-                        <div className="flex items-baseline">
-                            <p className="text-2xl font-bold text-slate-800">{formatCurrency(kpis.totalIncome)}</p>
+                        <div className="flex items-baseline flex-wrap">
+                            <p className="text-2xl font-bold text-slate-800 mr-2">{formatCurrency(kpis.totalIncome)}</p>
+                            {bcvRateUsd && <p className="text-sm font-medium text-slate-500">{formatBs(kpis.totalIncome, bcvRateUsd)}</p>}
                         </div>
                     </div>
 
@@ -91,8 +89,9 @@ export const DashboardPage: React.FC = () => {
                                 <Wallet size={16} />
                             </div>
                         </div>
-                        <div className="flex items-baseline">
-                            <p className="text-2xl font-bold text-slate-800">{formatCurrency(kpis.totalExpenses)}</p>
+                        <div className="flex items-baseline flex-wrap">
+                            <p className="text-2xl font-bold text-slate-800 mr-2">{formatCurrency(kpis.totalExpenses)}</p>
+                            {bcvRateUsd && <p className="text-sm font-medium text-slate-500">{formatBs(kpis.totalExpenses, bcvRateUsd)}</p>}
                         </div>
                     </div>
 
@@ -214,9 +213,12 @@ export const DashboardPage: React.FC = () => {
                     <div className="relative z-10 flex flex-col md:flex-row items-center justify-between">
                         <div>
                             <p className="text-slate-400 font-medium mb-1">Utilidad Operativa (Últimos 30 días)</p>
-                            <h3 className="text-4xl font-bold tracking-tight">
-                                {formatCurrency(kpis.profit)}
-                            </h3>
+                            <div className="flex items-baseline flex-wrap">
+                                <h3 className="text-4xl font-bold tracking-tight mr-3">
+                                    {formatCurrency(kpis.profit)}
+                                </h3>
+                                {bcvRateUsd && <span className="text-xl font-medium text-slate-300">{formatBs(kpis.profit, bcvRateUsd)}</span>}
+                            </div>
                         </div>
                         <div className="mt-4 md:mt-0 px-4 py-2 bg-white/10 rounded-lg backdrop-blur-sm border border-white/20 flex items-center">
                             <DollarSign size={20} className={kpis.profit >= 0 ? "text-emerald-400 mr-2" : "text-red-400 mr-2"} />

@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useFinancialStore } from '../hooks/useFinancialStore';
+import { useSystemStore } from '../../system/hooks/useSystemStore';
+import { formatCurrency, formatBs } from '../../../utils/format';
 import { Search, Users, ArrowRight, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const ReceivablesPage: React.FC = () => {
     const { receivables, fetchReceivables, isLoading } = useFinancialStore();
+    const { bcvRateUsd } = useSystemStore();
     const [searchTerm, setSearchTerm] = useState('');
     const navigate = useNavigate();
 
@@ -31,7 +34,10 @@ const ReceivablesPage: React.FC = () => {
                     </div>
                     <div>
                         <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider text-left">Total por Cobrar</p>
-                        <p className="text-xl font-bold text-gray-900">${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                        <div className="flex items-baseline gap-2">
+                            <p className="text-xl font-bold text-gray-900">{formatCurrency(totalBalance)}</p>
+                            {bcvRateUsd && <p className="text-sm font-medium text-gray-500">{formatBs(totalBalance, bcvRateUsd)}</p>}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -81,9 +87,14 @@ const ReceivablesPage: React.FC = () => {
                                             {r.last_order_date ? new Date(r.last_order_date).toLocaleDateString() : 'N/A'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right">
-                                            <span className="text-sm font-bold text-red-600">
-                                                ${r.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                            </span>
+                                            <div className="text-sm font-bold text-red-600">
+                                                {formatCurrency(r.balance)}
+                                            </div>
+                                            {bcvRateUsd && (
+                                                <div className="text-xs text-red-400 font-medium mt-0.5">
+                                                    {formatBs(r.balance, bcvRateUsd)}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             <button

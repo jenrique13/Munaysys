@@ -396,10 +396,13 @@ class Expense(Base):
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     date = Column(DateTime(timezone=True), server_default=func.now())
     amount = Column(Float, nullable=False)
+    exchange_rate = Column(Float, nullable=True)
+    exchange_currency = Column(String, default="usd")
     category = Column(String, nullable=False)
     description = Column(String)
     provider_id = Column(Integer, ForeignKey("providers.id"), nullable=True)
     provider = Column(String) # Legacy text field
+    payment_method = Column(String, nullable=True)
 
     branch = relationship("Branch")
     provider_rel = relationship("Provider", back_populates="expenses")
@@ -413,6 +416,8 @@ class Receipt(Base):
     purchase_id = Column(Integer, ForeignKey("purchases.id"), nullable=True)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
     amount = Column(Float, nullable=False)
+    exchange_rate = Column(Float, nullable=True)
+    exchange_currency = Column(String, default="usd")
     date = Column(DateTime(timezone=True), server_default=func.now())
     type = Column(String, default="income")  # income, expense
     payment_method = Column(String, nullable=False) # Cash, Zelle, Banesco (VE), etc.
@@ -459,6 +464,7 @@ class Payable(Base):
     purchase_id = Column(Integer, ForeignKey("purchases.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     paid_date = Column(DateTime(timezone=True), nullable=True)
+    payment_method = Column(String, nullable=True)
 
     provider = relationship("Provider", back_populates="payables")
     branch = relationship("Branch")
@@ -569,6 +575,9 @@ class CashMovement(Base):
     category = Column(String, nullable=False) # e.g. Petty Cash, Equity, Services
     description = Column(String)
     date = Column(DateTime(timezone=True), server_default=func.now())
+    client_name = Column(String, nullable=True)
+    provider_name = Column(String, nullable=True)
+    payment_method = Column(String, nullable=True)
 
     branch = relationship("Branch")
 

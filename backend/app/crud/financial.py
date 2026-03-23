@@ -605,6 +605,26 @@ def create_expense(db: Session, expense: schemas.ExpenseCreate):
     db.add(db_expense)
     db.commit()
     db.refresh(db_expense)
+    
+    # Auto CashMovement
+    provider_name = expense.provider
+    if not provider_name and expense.provider_id:
+        from app import models as module_models
+        prov = db.query(module_models.Provider).filter(module_models.Provider.id == expense.provider_id).first()
+        if prov: provider_name = prov.name
+        
+    cm = models.CashMovement(
+        branch_id=db_expense.branch_id,
+        amount=db_expense.amount,
+        type="expense",
+        category=db_expense.category,
+        description=db_expense.description or f"Gasto #{db_expense.id}",
+        provider_name=provider_name,
+        payment_method=db_expense.payment_method
+    )
+    db.add(cm)
+    db.commit()
+    
     return db_expense
 
 
@@ -731,10 +751,45 @@ def create_receipt(db: Session, receipt: schemas.ReceiptCreate):
     # Automatically update corresponding Order or Purchase status
     if db_receipt.orden_id and db_receipt.type == "income":
         update_document_payment_status(db, models.Orden, db_receipt.orden_id)
+        
+        # Auto CashMovement for income
+        client_name = None
+        if db_receipt.client_id:
+            client = db.query(models.Client).filter(models.Client.id == db_receipt.client_id).first()
+            if client: client_name = client.name
+            
+        cm = models.CashMovement(
+            branch_id=db_receipt.orden.branch_id if db_receipt.orden else 1,
+            amount=db_receipt.amount,
+            type="income",
+            category="Ventas",
+            description=f"Abono a Orden #{db_receipt.orden_id}",
+            client_name=client_name,
+            payment_method=db_receipt.payment_method
+        )
+        db.add(cm)
     
     if db_receipt.purchase_id and db_receipt.type == "expense":
         update_document_payment_status(db, models.Purchase, db_receipt.purchase_id)
+        
+        # Auto CashMovement for purchases
+        provider_name = None
+        purchase = db.query(models.Purchase).filter(models.Purchase.id == db_receipt.purchase_id).first()
+        if purchase:
+            provider_name = purchase.provider_name
+            
+        cm = models.CashMovement(
+            branch_id=purchase.branch_id if purchase else 1,
+            amount=db_receipt.amount,
+            type="expense",
+            category="Compras",
+            description=f"Abono a Compra #{db_receipt.purchase_id}",
+            provider_name=provider_name,
+            payment_method=db_receipt.payment_method
+        )
+        db.add(cm)
 
+    db.commit()
     return db_receipt
 
 
