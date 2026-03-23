@@ -5,7 +5,7 @@ from typing import List
 
 from app import models
 from app.api import deps
-from app.api.deps import get_target_branch_id
+from app.api.deps import get_target_branch_id, get_current_client
 from app.schemas import financial as schemas
 from app.crud import financial as crud
 
@@ -297,6 +297,15 @@ def read_client_statement(
     current_user: models.User = Depends(deps.get_current_user)
 ):
     return crud.get_client_statement(db=db, client_id=client_id)
+
+
+@router.get("/clients/me/statement")
+def read_client_statement_me(
+    db: Session = Depends(deps.get_db),
+    current_client: models.Client = Depends(get_current_client)
+):
+    """Retorna el estado de cuenta del cliente logueado."""
+    return crud.get_client_statement(db=db, client_id=current_client.id)
 
 
 # --- PURCHASES (COMPRAS) ---
