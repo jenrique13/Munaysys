@@ -290,15 +290,6 @@ def read_order_logs(
             log.user_email = log.user.email
     return logs
 
-@router.get("/clients/{client_id}/statement")
-def read_client_statement(
-    client_id: int,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
-):
-    return crud.get_client_statement(db=db, client_id=client_id)
-
-
 @router.get("/clients/me/statement")
 def read_client_statement_me(
     db: Session = Depends(deps.get_db),
@@ -306,6 +297,15 @@ def read_client_statement_me(
 ):
     """Retorna el estado de cuenta del cliente logueado."""
     return crud.get_client_statement(db=db, client_id=current_client.id)
+
+
+@router.get("/clients/{client_id}/statement")
+def read_client_statement(
+    client_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User = Depends(deps.get_current_user)
+):
+    return crud.get_client_statement(db=db, client_id=client_id)
 
 
 # --- PURCHASES (COMPRAS) ---
@@ -601,3 +601,4 @@ def get_dashboard_stats(
     Returns consolidated statistics for the dashboard.
     """
     return crud.get_dashboard_stats(db=db, branch_id=target_branch_id)
+
