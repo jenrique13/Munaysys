@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useFinancialStore } from '../hooks/useFinancialStore';
+import { useAuthStore } from '../../auth/hooks/useAuthStore';
 import { useSystemStore } from '../../system/hooks/useSystemStore';
 import { formatCurrency, formatBs } from '../../../utils/format';
 import { Search, Users, ArrowRight, Wallet } from 'lucide-react';
@@ -8,12 +9,13 @@ import { useNavigate } from 'react-router-dom';
 const ReceivablesPage: React.FC = () => {
     const { receivables, fetchReceivables, isLoading } = useFinancialStore();
     const { bcvRateUsd } = useSystemStore();
+    const { selectedBranchId } = useAuthStore();
     const [searchTerm, setSearchTerm] = useState('');
     const navigate = useNavigate();
 
     useEffect(() => {
         fetchReceivables();
-    }, [fetchReceivables]);
+    }, [fetchReceivables, selectedBranchId]);
 
     const filteredReceivables = receivables.filter(r =>
         r.client_name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -98,7 +100,7 @@ const ReceivablesPage: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             <button
-                                                onClick={() => navigate('/billing')}
+                                                onClick={() => navigate(`/billing?client_id=${r.client_id}`)}
                                                 className="inline-flex items-center text-indigo-600 hover:text-indigo-900 transition-colors"
                                             >
                                                 Ver Estado <ArrowRight size={14} className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity" />

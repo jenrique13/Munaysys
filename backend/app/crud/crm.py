@@ -2,6 +2,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from app import models
 from app.schemas import crm as schemas
+from app.crud import operative as crud_operative
 
 # --- STAGES ---
 def get_stages(db: Session, branch_id: int):
@@ -99,32 +100,8 @@ def update_opportunity_stage(db: Session, opp_id: int, stage_id: int):
         if lead:
             lead.status = "won"
 
-            # Verificar si ya existe un cliente con el mismo email o nombre en la misma sede
-            existing_client = None
-            if lead.email:
-                existing_client = db.query(models.Client).filter(
-                    models.Client.branch_id == lead.branch_id,
-                    models.Client.email == lead.email
-                ).first()
-            
-            if not existing_client:
-                existing_client = db.query(models.Client).filter(
-                    models.Client.branch_id == lead.branch_id,
-                    models.Client.name == lead.name
-                ).first()
-
-            if not existing_client:
-                # Crear el cliente a partir del Lead
-                new_client = models.Client(
-                    name=lead.name,
-                    email=lead.email,
-                    phone=lead.phone,
-                    branch_id=lead.branch_id,
-                    lead_id=lead.id,
-                    status="active",
-                    notes=f"Cliente convertido desde Lead #{lead.id}. Empresa: {lead.company or 'N/A'}"
-                )
-                db.add(new_client)
+            # Usar el helper robusto para obtener o crear el cliente
+            new_client = crud_operative.get_or_create_client_from_lead(db, lead)
 
     db.commit()
     db.refresh(db_obj)

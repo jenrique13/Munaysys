@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../auth/hooks/useAuthStore';
 import { useFinancialStore } from '../hooks/useFinancialStore';
 import { useInventoryStore } from '../hooks/useInventoryStore';
@@ -6,7 +7,7 @@ import { useOperativeStore } from '../../operative/hooks/useOperativeStore';
 import { useSystemStore } from '../../system/hooks/useSystemStore';
 import { formatBs } from '../../../utils/format';
 import type { Orden, Pedido } from '../types';
-import type { Amenity } from '../../operative/types';
+import type { Amenity, Client } from '../../operative/types';
 import { operativeService } from '../../operative/services/operative.service';
 import { ShoppingBag, Plus, Search, X, Receipt as ReceiptIcon, Download, Edit2, Trash2, History, Eye } from 'lucide-react';
 
@@ -32,7 +33,7 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
     };
     const labels: Record<string, string> = { pending: 'Pendiente', partial: 'Abono Parcial', paid: 'Pagado', cancelled: 'Cancelado' };
     return (
-        <span className={`text - xs font - semibold px - 2 py - 0.5 rounded - full ${map[status] ?? 'bg-gray-100 text-gray-500'} `}>
+        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${map[status] ?? 'bg-gray-100 text-gray-500'}`}>
             {labels[status] ?? status}
         </span>
     );
@@ -132,7 +133,9 @@ const NewOrderModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     const { selectedBranchId } = useAuthStore();
     const { createOrder, products, isLoading } = useFinancialStore();
     const { services, fetchInventory } = useInventoryStore();
-    const { clients, offices, rooms, fetchClients, fetchOffices, fetchRooms } = useOperativeStore();
+    const { offices, rooms, fetchOffices, fetchRooms } = useOperativeStore();
+    const [clients, setClients] = useState<Client[]>([]); // LOCAL search results
+    const [isSearching, setIsSearching] = useState(false);
 
     useEffect(() => {
         fetchOffices(selectedBranchId ?? undefined);
@@ -140,7 +143,7 @@ const NewOrderModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         fetchInventory();
     }, [selectedBranchId, fetchOffices, fetchRooms, fetchInventory]);
 
-    const [clientId, setClientId] = useState<number>(clients[0]?.id || 0);
+    const [clientId, setClientId] = useState<number>(0);
     const [clientAmenities, setClientAmenities] = useState<Amenity[]>([]);
 
     useEffect(() => {
@@ -157,11 +160,23 @@ const NewOrderModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     const [showClientResults, setShowClientResults] = useState(false);
 
     useEffect(() => {
+        const fetchInitialClients = async () => {
+            setIsSearching(true);
+            try {
+                const results = await operativeService.getClients(selectedBranchId ?? undefined, clientSearch);
+                setClients(results);
+            } catch (error) {
+                console.error('Error searching clients:', error);
+            } finally {
+                setIsSearching(false);
+            }
+        };
+
         const timer = setTimeout(() => {
-            fetchClients(selectedBranchId ?? undefined, clientSearch);
+            fetchInitialClients();
         }, 300);
         return () => clearTimeout(timer);
-    }, [clientSearch, selectedBranchId, fetchClients]);
+    }, [clientSearch, selectedBranchId]);
 
     const [catalogSearch, setCatalogSearch] = useState('');
 
@@ -270,19 +285,36 @@ const NewOrderModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                             <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
                             <div className="relative">
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                                    <Search size={14} />
+                                    {isSearching ? <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-indigo-500 border-t-transparent" /> : <Search size={14} />}
                                 </span>
                                 <input
                                     type="text"
                                     placeholder="Buscar cliente por nombre, correo o ID..."
-                                    value={clientSearch || (clients.find(c => c.id === clientId)?.name || '')}
+                                    value={clientSearch}
                                     onChange={e => {
                                         setClientSearch(e.target.value);
                                         setShowClientResults(true);
+                                        // Reset clientId if user starts typing manually unless they already picked one and then changed it
+                                        if (clientId !== 0 && e.target.value !== (clients.find(c => c.id === clientId)?.name || '')) {
+                                            setClientId(0);
+                                        }
                                     }}
                                     onFocus={() => setShowClientResults(true)}
                                     className="w-full pl-9 pr-3 py-2 border rounded-lg outline-none bg-white focus:ring-2 focus:ring-indigo-500 text-sm"
                                 />
+                                {clientSearch && (
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            setClientSearch('');
+                                            setClientId(0);
+                                            setShowClientResults(false);
+                                        }}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                    >
+                                        <X size={14} />
+                                    </button>
+                                )}
                                 {showClientResults && (clients.length > 0 || clientSearch) && (
                                     <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-xl max-h-60 overflow-auto">
                                         {clients.length === 0 ? (
@@ -908,7 +940,12 @@ const OrdersPage: React.FC = () => {
     const { orders, fetchOrders, fetchProducts, fetchPaymentMethods, isLoading } = useFinancialStore();
     const { bcvRateUsd } = useSystemStore();
     const { clients, fetchClients } = useOperativeStore();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const urlClientId = searchParams.get('client_id');
+    const urlStatus = searchParams.get('status');
+
     const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState<string>(urlStatus || 'all');
     const [showNew, setShowNew] = useState(false);
     const [payOrder, setPayOrder] = useState<Orden | null>(null);
     const [deleteOrderTarget, setDeleteOrderTarget] = useState<Orden | null>(null);
@@ -919,15 +956,24 @@ const OrdersPage: React.FC = () => {
     useEffect(() => {
         fetchOrders(selectedBranchId ?? undefined);
         fetchProducts(selectedBranchId ?? undefined);
-        fetchClients();
+        fetchClients(selectedBranchId ?? undefined);
         fetchPaymentMethods(selectedBranchId ?? undefined);
-    }, [selectedBranchId, fetchOrders, fetchProducts, fetchClients, fetchPaymentMethods]);
+
+        if (urlClientId && clients.length > 0) {
+            const client = clients.find(c => c.id === Number(urlClientId));
+            if (client) {
+                setSearch(client.name);
+            }
+        }
+    }, [selectedBranchId, fetchOrders, fetchProducts, fetchClients, fetchPaymentMethods, urlClientId]);
 
     const getClientName = (id: number) => clients.find(c => c.id === id)?.name || 'Cliente desconocido';
 
-    const filtered = orders.filter(o =>
-        getClientName(o.client_id).toLowerCase().includes(search.toLowerCase())
-    ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const filtered = orders.filter(o => {
+        const matchesClient = getClientName(o.client_id).toLowerCase().includes(search.toLowerCase());
+        const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
+        return matchesClient && matchesStatus;
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     return (
         <div className="flex flex-col h-full bg-gray-50/30">
@@ -963,10 +1009,23 @@ const OrdersPage: React.FC = () => {
             </div>
 
             <div className="px-6 py-3 bg-white border-b shrink-0 flex items-center justify-between">
-                <div className="relative max-w-sm w-full">
-                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por cliente..."
-                        className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition" />
+                <div className="flex gap-4 flex-1 max-w-2xl">
+                    <div className="relative flex-1">
+                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por cliente..."
+                            className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition" />
+                    </div>
+                    <select
+                        value={statusFilter}
+                        onChange={e => setStatusFilter(e.target.value)}
+                        className="px-3 py-2 border rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
+                    >
+                        <option value="all">Todos los estados</option>
+                        <option value="pending">Pendientes</option>
+                        <option value="partial">Abono Parcial</option>
+                        <option value="paid">Pagados</option>
+                        <option value="cancelled">Anulados</option>
+                    </select>
                 </div>
                 <div className="flex gap-2">
                     <span className="px-3 py-1.5 text-xs bg-indigo-50 text-indigo-700 rounded font-medium border border-indigo-100">Mostrando {filtered.length} órdenes</span>

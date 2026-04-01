@@ -11,13 +11,15 @@ import { Wallet, Plus, Search, Tag, X, Download } from 'lucide-react';
 
 const NewExpenseModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     const { selectedBranchId } = useAuthStore();
-    const { createExpense, isLoading, cashCategories, paymentMethods } = useFinancialStore();
+    const { createExpense, isLoading, error, cashCategories, paymentMethods, fetchPaymentMethods } = useFinancialStore();
     const { providers, fetchProviders } = useProvidersStore();
-    const { bcvRateUsd, bcvRateEur } = useSystemStore();
+    const { bcvRateUsd, bcvRateEur, fetchBcvRates } = useSystemStore();
 
     useEffect(() => {
+        if (paymentMethods.length === 0) fetchPaymentMethods();
+        if (!bcvRateUsd) fetchBcvRates();
         fetchProviders();
-    }, [fetchProviders]);
+    }, [fetchProviders, fetchPaymentMethods, fetchBcvRates, paymentMethods.length, bcvRateUsd]);
 
     const [amount, setAmount] = useState<number>(0);
     const expenseCategories = cashCategories.filter(c => c.type === 'expense' && c.is_active);
@@ -112,9 +114,10 @@ const NewExpenseModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                         </select>
                     </div>
                     <div className="flex justify-end gap-3 pt-4 border-t">
+                        {error && <p className="text-[10px] text-red-500 flex-1 self-center font-bold">{error}</p>}
                         <button type="button" onClick={onClose} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">Cancelar</button>
                         <button disabled={isLoading || amount <= 0} type="submit" className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
-                            {isLoading ? 'Guardando...' : 'Registrar'}
+                            {isLoading ? 'Procesando...' : 'Registrar Gasto'}
                         </button>
                     </div>
                 </form>
@@ -125,7 +128,8 @@ const NewExpenseModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
 const ExpensesPage: React.FC = () => {
     const { selectedBranchId } = useAuthStore();
-    const { expenses, fetchExpenses, fetchCashCategories, isLoading } = useFinancialStore();
+    const { expenses, fetchExpenses, fetchCashCategories, fetchPaymentMethods, isLoading, error } = useFinancialStore();
+    const { fetchBcvRates } = useSystemStore();
     const { bcvRateUsd } = useSystemStore();
     const [search, setSearch] = useState('');
     const [showNew, setShowNew] = useState(false);
@@ -133,7 +137,9 @@ const ExpensesPage: React.FC = () => {
     useEffect(() => {
         fetchExpenses(selectedBranchId ?? undefined);
         fetchCashCategories();
-    }, [selectedBranchId, fetchExpenses, fetchCashCategories]);
+        fetchPaymentMethods();
+        fetchBcvRates();
+    }, [selectedBranchId, fetchExpenses, fetchCashCategories, fetchPaymentMethods, fetchBcvRates]);
 
     const filtered = expenses.filter(e =>
         e.category.toLowerCase().includes(search.toLowerCase()) ||
@@ -152,6 +158,7 @@ const ExpensesPage: React.FC = () => {
                     <p className="text-sm text-gray-500 mt-1">Registro de pagos de servicios, nómina y otros gastos (no inventario).</p>
                 </div>
                 <div className="flex gap-3">
+                    {error && <div className="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm font-bold border border-red-100 self-center">{error}</div>}
                     <button onClick={() => {
                         import('../../../utils/exportToCSV').then(({ exportToCSV }) => {
                             const exportData = filtered.map(e => ({

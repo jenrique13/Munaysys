@@ -1,3 +1,5 @@
+import type { Branch } from '../../configuration/types';
+
 export interface PaymentMethod {
     id: number;
     name: string;
@@ -187,6 +189,7 @@ export interface CashMovement {
     provider_name?: string;
     payment_method?: string;
     date: string;
+    branch?: Branch;
 }
 
 export interface ReceivableSummary {

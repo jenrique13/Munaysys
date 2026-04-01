@@ -110,6 +110,7 @@ class ReceiptBase(BaseModel):
     client_id: Optional[int] = None
     orden_id: Optional[int] = None
     purchase_id: Optional[int] = None
+    branch_id: Optional[int] = None
 
 class ReceiptCreate(ReceiptBase):
     pass
@@ -117,6 +118,7 @@ class ReceiptCreate(ReceiptBase):
 class Receipt(ReceiptBase):
     id: int
     date: datetime
+    branch_id: Optional[int] = None
     branch: Optional[BranchResponse] = None
 
     class Config:
@@ -287,6 +289,7 @@ class CashMovementCreate(CashMovementBase):
 class CashMovement(CashMovementBase):
     id: int
     date: datetime
+    branch: Optional[BranchResponse] = None
 
     class Config:
         from_attributes = True

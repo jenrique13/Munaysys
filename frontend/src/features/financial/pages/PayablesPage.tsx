@@ -9,8 +9,8 @@ import type { Payable } from '../services/providers.service';
 
 const PayablesPage: React.FC = () => {
     const { payables, providers, isLoading, fetchPayables, fetchProviders, createPayable, updatePayable } = useProvidersStore();
-    const { paymentMethods } = useFinancialStore();
-    const { bcvRateUsd, bcvRateEur } = useSystemStore();
+    const { paymentMethods, fetchPaymentMethods } = useFinancialStore();
+    const { bcvRateUsd, bcvRateEur, fetchBcvRates } = useSystemStore();
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid'>('all');
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -31,13 +31,15 @@ const PayablesPage: React.FC = () => {
 
     useEffect(() => {
         fetchPayables();
-        fetchProviders(); // Needed for the dropdown
-    }, [fetchPayables, fetchProviders]);
+        fetchProviders();
+        fetchPaymentMethods();
+        fetchBcvRates();
+    }, [fetchPayables, fetchProviders, fetchPaymentMethods, fetchBcvRates]);
 
     const filteredPayables = payables.filter(p => {
         const matchesSearch =
-            (p.provider?.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            (p.reference && p.reference.toLowerCase().includes(searchTerm.toLowerCase()));
+            (p.provider?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
+            (p.reference?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false);
 
         const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
 

@@ -25,6 +25,44 @@ from reportlab.platypus import (
 )
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 
+from app.utils.reports_helper import render_html_to_pdf
+
+# NEW: BCV Rate helper with DB persistence
+async def _get_rates_for_date(db: Session, target_date: date):
+    # Try to find in DB
+    rate_entry = db.query(models.ExchangeRate).filter(models.ExchangeRate.date == target_date).first()
+    if rate_entry:
+        return float(rate_entry.usd_rate), float(rate_entry.eur_rate)
+
+    # If not found and it's today, try to fetch from BCV
+    if target_date == date.today():
+        try:
+            from currency_rate_bcv import Currency
+            currency = Currency()
+            usd_val = await currency.getDollar
+            eur_val = await currency.getEuro
+            usd = float(usd_val or 0.0)
+            eur = float(eur_val or 0.0)
+            
+            if usd > 0:
+                # Save to DB for future use
+                new_rate = models.ExchangeRate(date=target_date, usd_rate=usd, eur_rate=eur)
+                db.add(new_rate)
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
+            return usd, eur
+        except Exception:
+            pass
+            
+    # Fallback to the latest available rate
+    latest = db.query(models.ExchangeRate).order_by(models.ExchangeRate.date.desc()).first()
+    if latest:
+        return float(latest.usd_rate), float(latest.eur_rate)
+        
+    return 0.0, 0.0
+
 router = APIRouter()
 
 # ─── Role helpers ─────────────────────────────────────────────────────────────
@@ -49,21 +87,26 @@ def _require_role(user: models.User, allowed: set[str]) -> None:
 
 # ─── PDF Helpers ──────────────────────────────────────────────────────────────
 
-def _base_doc(title: str, subtitle: str) -> tuple[io.BytesIO, SimpleDocTemplate, list]:
+def _base_doc(title: str, subtitle: str, rates: tuple[float, float] = (0.0, 0.0)) -> tuple[io.BytesIO, SimpleDocTemplate, list]:
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf,
         pagesize=A4,
-        rightMargin=2 * cm,
-        leftMargin=2 * cm,
-        topMargin=2 * cm,
-        bottomMargin=2 * cm,
+        rightMargin=1.5 * cm,
+        leftMargin=1.5 * cm,
+        topMargin=1.5 * cm,
+        bottomMargin=1.5 * cm,
     )
     styles = getSampleStyleSheet()
     header_style = ParagraphStyle("Header", parent=styles["Title"], fontSize=16, textColor=colors.HexColor("#1E293B"), spaceAfter=4)
-    sub_style = ParagraphStyle("Sub", parent=styles["Normal"], fontSize=10, textColor=colors.HexColor("#64748B"), spaceAfter=12)
+    sub_style = ParagraphStyle("Sub", parent=styles["Normal"], fontSize=10, textColor=colors.HexColor("#64748B"), spaceAfter=6)
+    rate_style = ParagraphStyle("Rates", parent=styles["Normal"], fontSize=8, textColor=colors.HexColor("#475569"), alignment=TA_RIGHT)
 
+    usd, eur = rates
+    rate_text = f"Tasa BCV: USD {usd:,.2f} | EUR {eur:,.2f}" if usd > 0 else "Tasa BCV: No disponible"
+    
     story: list = [
+        Paragraph(rate_text, rate_style),
         Paragraph("Munaysys – Nest Coworking", header_style),
         Paragraph(title, ParagraphStyle("T2", parent=styles["Heading2"], fontSize=13, textColor=colors.HexColor("#4F46E5"), spaceAfter=2)),
         Paragraph(subtitle, sub_style),
@@ -93,7 +136,17 @@ def _table(data: list[list], col_widths: list[float] | None = None) -> Table:
 
 
 def _finalize(buf: io.BytesIO, doc: SimpleDocTemplate, story: list, filename: str) -> StreamingResponse:
-    doc.build(story)
+    try:
+        doc.build(story)
+    except Exception as e:
+        import logging, sys, traceback
+        logging.getLogger("uvicorn").error(f"Error building PDF {filename}: {str(e)}")
+        print(f"CRITICAL ERROR BUILDING PDF {filename}: {str(e)}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al generar el PDF: {str(e)}"
+        )
     buf.seek(0)
     return StreamingResponse(
         buf,
@@ -102,14 +155,20 @@ def _finalize(buf: io.BytesIO, doc: SimpleDocTemplate, story: list, filename: st
     )
 
 
-def _currency(v: float) -> str:
-    return f"${v:,.2f}"
+def _currency(v: float, rate: float = 0.0) -> str:
+    if v is None:
+        v = 0.0
+    usd_str = f"${v:,.2f}"
+    if rate > 0:
+        bs_val = v * rate
+        return f"{usd_str} (Bs {bs_val:,.2f})"
+    return usd_str
 
 
 # ─── REPORTE DIARIO ───────────────────────────────────────────────────────────
 
 @router.get("/daily")
-def daily_report(
+async def daily_report(
     report_date: date = Query(default=None, description="Fecha del reporte (YYYY-MM-DD). Default: hoy."),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
@@ -120,9 +179,15 @@ def daily_report(
         report_date = date.today()
 
     branch_id = target_branch_id
-    # Date window (full day in UTC)
-    day_start = datetime(report_date.year, report_date.month, report_date.day, 0, 0, 0, tzinfo=timezone.utc)
+    # Date window (full day in local/server time for queries)
+    day_start = datetime(report_date.year, report_date.month, report_date.day, 0, 0, 0)
     day_end = day_start + timedelta(days=1)
+
+    # Branch Name
+    branch_name = "Todas las Sedes"
+    if branch_id > 0:
+        branch = db.query(models.Branch).filter(models.Branch.id == branch_id).first()
+        branch_name = branch.name if branch else "Desconocida"
 
     # ── Órdenes del día ──
     q_orders = db.query(models.Orden).filter(
@@ -134,23 +199,38 @@ def daily_report(
     orders = q_orders.all()
 
     # ── Recibos (pagos) del día ──
-    receipt_ids = [r.id for o in orders for r in o.receipts]
-    receipts = db.query(models.Receipt).filter(models.Receipt.id.in_(receipt_ids)).all() if receipt_ids else []
+    # Note:Receipt has its own date, we should probably use receipts created on that day too
+    q_receipts = db.query(models.Receipt).filter(
+        models.Receipt.date >= day_start,
+        models.Receipt.date < day_end,
+    )
+    if branch_id > 0:
+        q_receipts = q_receipts.filter(models.Receipt.branch_id == branch_id)
+    receipts = q_receipts.all()
+
+    rates = await _get_rates_for_date(db, report_date)
+    usd_rate, eur_rate = rates
 
     # Agrupar por método de pago
     by_payment: dict[str, float] = {}
+    total_income = 0.0
     for r in receipts:
-        by_payment[r.payment_method] = by_payment.get(r.payment_method, 0.0) + r.amount
+        if r.type == "income":
+            method = str(r.payment_method) if r.payment_method else "Desconocido"
+            amount = float(r.amount or 0.0)
+            by_payment[method] = by_payment.get(method, 0.0) + amount
+            total_income += amount
 
     # ── Ventas por tipo de ítem ──
     item_totals: dict[str, float] = {"product": 0.0, "room": 0.0, "office": 0.0, "amenity": 0.0, "service": 0.0, "package": 0.0}
+    total_sales = 0.0
     for o in orders:
+        total_sales += float(o.total or 0.0)
         for d in o.details:
             key = d.item_type if d.item_type in item_totals else "service"
-            item_totals[key] = item_totals.get(key, 0.0) + d.subtotal
+            item_totals[key] = item_totals.get(key, 0.0) + float(d.subtotal or 0.0)
 
     # ── Clientes con deuda ──
-    # Órdenes pendientes/parciales con balance > 0
     q_debts = db.query(models.Orden).filter(
         models.Orden.status.in_(["pending", "partial"])
     )
@@ -159,94 +239,183 @@ def daily_report(
     debt_orders = q_debts.all()
 
     clients_with_debt: dict[int, dict] = {}
+    total_debt = 0.0
     for o in debt_orders:
-        paid = sum(r.amount for r in o.receipts if r.type == "income")
-        balance = o.total - paid
+        paid = sum(float(r.amount or 0.0) for r in o.receipts if r.type == "income")
+        balance = float(o.total or 0.0) - paid
         if balance > 0.01:
             cid = o.client_id
             if cid not in clients_with_debt:
-                clients_with_debt[cid] = {"name": o.client.name if o.client else "N/A", "balance": 0.0}
+                clients_with_debt[cid] = {"name": str(o.client.name) if o.client and o.client.name else "N/A", "balance": 0.0}
             clients_with_debt[cid]["balance"] += balance
+            total_debt += balance
 
-    # ── Build PDF ──
-    total_day = sum(o.total for o in orders)
-    buf, doc, story = _base_doc(
-        f"Reporte Diario de Ventas",
-        f"Fecha: {report_date.strftime('%d/%m/%Y')}  |  Total órdenes: {len(orders)}  |  Total: {_currency(total_day)}"
+    # Prepare context for template
+    context = {
+        "date": report_date.strftime("%d/%m/%Y"),
+        "branch_name": branch_name,
+        "usd_rate": usd_rate,
+        "eur_rate": eur_rate,
+        "totals": {
+            "total": total_sales,
+            "office": item_totals["office"],
+            "room": item_totals["room"],
+            "product": item_totals["product"],
+            "service": item_totals["service"],
+            "package": item_totals["package"],
+            "income": total_income,
+            "total_debt": total_debt
+        },
+        "by_payment": by_payment,
+        "orders": [
+            {
+                "id": o.id,
+                "client_name": o.client.name if o.client else "N/A",
+                "status": o.status,
+                "total": float(o.total or 0.0),
+                "paid": sum(float(r.amount or 0.0) for r in o.receipts if r.type == "income")
+            } for o in orders
+        ],
+        "debts": sorted(clients_with_debt.values(), key=lambda x: -x["balance"]),
+        "now": datetime.now().strftime("%d/%m/%Y %H:%M")
+    }
+
+    pdf_buf = render_html_to_pdf("daily_report.html", context)
+    return StreamingResponse(
+        pdf_buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=reporte_diario_{report_date}.pdf"}
     )
 
-    styles = getSampleStyleSheet()
-    h3 = ParagraphStyle("h3", parent=styles["Heading3"], fontSize=10, textColor=colors.HexColor("#1E293B"), spaceBefore=12, spaceAfter=6)
 
-    # 1. Ventas por método de pago
-    story.append(Paragraph("1. Ingresos por Método de Pago", h3))
-    if by_payment:
-        pay_data = [["Método de Pago", "Monto"]]
-        for m, v in sorted(by_payment.items()):
-            pay_data.append([m, _currency(v)])
-        pay_data.append(["TOTAL", _currency(sum(by_payment.values()))])
-        t = _table(pay_data, [10 * cm, 5 * cm])
-        t.setStyle(TableStyle([
-            ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
-            ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#EEF2FF")),
-        ]), overrideList=False)
-        story.append(t)
-    else:
-        story.append(Paragraph("Sin pagos registrados para este día.", styles["Normal"]))
+@router.get("/cashflow/income")
+async def cashflow_income_report(
+    start: date = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    end: date = Query(..., description="Fecha fin (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+    target_branch_id: int = Depends(get_target_branch_id),
+):
+    """Reporte de ingresos de flujo de caja."""
+    _require_role(current_user, ROLES_FINANCIAL_ADMIN)
+    
+    branch_id = target_branch_id
+    start_dt = datetime(start.year, start.month, start.day, 0, 0, 0)
+    end_dt = datetime(end.year, end.month, end.day, 23, 59, 59)
 
-    story.append(Spacer(1, 0.3 * cm))
+    q = db.query(models.CashMovement).filter(
+        models.CashMovement.type == "income",
+        models.CashMovement.date >= start_dt,
+        models.CashMovement.date <= end_dt
+    )
+    if branch_id > 0:
+        q = q.filter(models.CashMovement.branch_id == branch_id)
+    
+    movements = q.order_by(models.CashMovement.date.asc()).all()
+    
+    # Branch Name
+    branch_name = "Todas las Sedes"
+    if branch_id > 0:
+        branch = db.query(models.Branch).filter(models.Branch.id == branch_id).first()
+        branch_name = branch.name if branch else "Desconocida"
 
-    # 2. Ventas por categoría de ítem
-    story.append(Paragraph("2. Ventas por Categoría de Ítem", h3))
-    labels = {"product": "Productos", "room": "Salas", "office": "Oficinas", "amenity": "Amenidades", "service": "Servicios", "package": "Paquetes"}
-    cat_data = [["Categoría", "Monto"]]
-    for k, label in labels.items():
-        if item_totals.get(k, 0.0) > 0:
-            cat_data.append([label, _currency(item_totals[k])])
-    if len(cat_data) == 1:
-        story.append(Paragraph("Sin ventas por categoría para este día.", styles["Normal"]))
-    else:
-        story.append(_table(cat_data, [10 * cm, 5 * cm]))
+    rates = await _get_rates_for_date(db, date.today()) # Use current rate for conversion display
+    usd_rate, eur_rate = rates
 
-    story.append(Spacer(1, 0.3 * cm))
+    total_amount = sum(m.amount for m in movements)
+    
+    context = {
+        "report_type": "Ingresos",
+        "date_range": f"{start.strftime('%d/%m/%Y')} al {end.strftime('%d/%m/%Y')}",
+        "branch_name": branch_name,
+        "usd_rate": usd_rate,
+        "eur_rate": eur_rate,
+        "total_amount": total_amount,
+        "movements": [
+            {
+                "date": m.date.strftime("%d/%m/%Y"),
+                "category": m.category,
+                "description": m.description,
+                "entity_name": m.client_name or "-",
+                "payment_method": m.payment_method or "-",
+                "amount": m.amount
+            } for m in movements
+        ],
+        "now": datetime.now().strftime("%d/%m/%Y %H:%M")
+    }
 
-    # 3. Detalle de órdenes
-    story.append(Paragraph("3. Detalle de Órdenes del Día", h3))
-    if orders:
-        ord_data = [["#", "Cliente", "Estado", "Total", "Pagado"]]
-        for o in orders:
-            paid = sum(r.amount for r in o.receipts if r.type == "income")
-            ord_data.append([
-                str(o.id),
-                o.client.name if o.client else "N/A",
-                o.status,
-                _currency(o.total),
-                _currency(paid),
-            ])
-        story.append(_table(ord_data, [1.5 * cm, 7 * cm, 2.5 * cm, 3 * cm, 3 * cm]))
-    else:
-        story.append(Paragraph("No hay órdenes para este día.", styles["Normal"]))
-
-    story.append(Spacer(1, 0.3 * cm))
-
-    # 4. Clientes con deuda
-    story.append(Paragraph("4. Estado de Cuenta – Clientes con Saldo Pendiente", h3))
-    if clients_with_debt:
-        debt_data = [["Cliente", "Saldo Pendiente"]]
-        for cid, info in sorted(clients_with_debt.items(), key=lambda x: -x[1]["balance"]):
-            debt_data.append([info["name"], _currency(info["balance"])])
-        debt_data.append(["TOTAL", _currency(sum(v["balance"] for v in clients_with_debt.values()))])
-        story.append(_table(debt_data, [12 * cm, 5 * cm]))
-    else:
-        story.append(Paragraph("No hay clientes con saldo pendiente.", styles["Normal"]))
-
-    return _finalize(buf, doc, story, f"reporte_diario_{report_date}.pdf")
+    pdf_buf = render_html_to_pdf("cashflow_report.html", context)
+    return StreamingResponse(
+        pdf_buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=reporte_ingresos_{start}_{end}.pdf"}
+    )
 
 
-# ─── REPORTE DE VENTAS (CRM) ─────────────────────────────────────────────────
+@router.get("/cashflow/expense")
+async def cashflow_expense_report(
+    start: date = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    end: date = Query(..., description="Fecha fin (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+    target_branch_id: int = Depends(get_target_branch_id),
+):
+    """Reporte de egresos de flujo de caja."""
+    _require_role(current_user, ROLES_FINANCIAL_ADMIN)
+    
+    branch_id = target_branch_id
+    start_dt = datetime(start.year, start.month, start.day, 0, 0, 0)
+    end_dt = datetime(end.year, end.month, end.day, 23, 59, 59)
 
+    q = db.query(models.CashMovement).filter(
+        models.CashMovement.type == "expense",
+        models.CashMovement.date >= start_dt,
+        models.CashMovement.date <= end_dt
+    )
+    if branch_id > 0:
+        q = q.filter(models.CashMovement.branch_id == branch_id)
+    
+    movements = q.order_by(models.CashMovement.date.asc()).all()
+    
+    # Branch Name
+    branch_name = "Todas las Sedes"
+    if branch_id > 0:
+        branch = db.query(models.Branch).filter(models.Branch.id == branch_id).first()
+        branch_name = branch.name if branch else "Desconocida"
+
+    rates = await _get_rates_for_date(db, date.today())
+    usd_rate, eur_rate = rates
+
+    total_amount = sum(m.amount for m in movements)
+    
+    context = {
+        "report_type": "Egresos",
+        "date_range": f"{start.strftime('%d/%m/%Y')} al {end.strftime('%d/%m/%Y')}",
+        "branch_name": branch_name,
+        "usd_rate": usd_rate,
+        "eur_rate": eur_rate,
+        "total_amount": total_amount,
+        "movements": [
+            {
+                "date": m.date.strftime("%d/%m/%Y"),
+                "category": m.category,
+                "description": m.description,
+                "entity_name": m.provider_name or "-",
+                "payment_method": m.payment_method or "-",
+                "amount": m.amount
+            } for m in movements
+        ],
+        "now": datetime.now().strftime("%d/%m/%Y %H:%M")
+    }
+
+    pdf_buf = render_html_to_pdf("cashflow_report.html", context)
+    return StreamingResponse(
+        pdf_buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=reporte_egresos_{start}_{end}.pdf"}
+    )
 @router.get("/sales")
-def sales_report(
+async def sales_report(
     start: date = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
     end: date = Query(..., description="Fecha fin (YYYY-MM-DD)"),
     db: Session = Depends(get_db),
@@ -285,9 +454,13 @@ def sales_report(
         day_key = o.date.strftime("%Y-%m-%d") if o.date else "?"
         daily_totals[day_key] = daily_totals.get(day_key, 0.0) + o.total
 
+    rates = await _get_rates()
+    usd_rate = rates[0]
+
     buf, doc, story = _base_doc(
         "Reporte de Ventas",
-        f"Período: {start.strftime('%d/%m/%Y')} al {end.strftime('%d/%m/%Y')}  |  Órdenes: {len(orders)}  |  Total: {_currency(total_bruto)}"
+        f"Período: {start.strftime('%d/%m/%Y')} al {end.strftime('%d/%m/%Y')}  |  Órdenes: {len(orders)}  |  Total: {_currency(total_bruto, usd_rate)}",
+        rates=rates
     )
     styles = getSampleStyleSheet()
     h3 = ParagraphStyle("h3", parent=styles["Heading3"], fontSize=10, textColor=colors.HexColor("#1E293B"), spaceBefore=12, spaceAfter=6)
@@ -296,9 +469,9 @@ def sales_report(
     story.append(Paragraph("1. Resumen General", h3))
     summary_data = [
         ["Concepto", "Monto"],
-        ["Total Ventas (bruto)", _currency(total_bruto)],
-        ["Total Cobrado", _currency(total_pagado)],
-        ["Saldo por Cobrar", _currency(total_bruto - total_pagado)],
+        ["Total Ventas (bruto)", _currency(total_bruto, usd_rate)],
+        ["Total Cobrado", _currency(total_pagado, usd_rate)],
+        ["Saldo por Cobrar", _currency(total_bruto - total_pagado, usd_rate)],
         ["Cantidad de Órdenes", str(len(orders))],
     ]
     story.append(_table(summary_data, [10 * cm, 5 * cm]))
@@ -310,7 +483,7 @@ def sales_report(
     cat_data = [["Categoría", "Monto"]]
     for k in ["product", "service", "room", "office", "amenity", "package"]:
         if cat_totals.get(k, 0.0) > 0:
-            cat_data.append([labels.get(k, k), _currency(cat_totals[k])])
+            cat_data.append([labels.get(k, k), _currency(cat_totals[k], usd_rate)])
     if len(cat_data) == 1:
         story.append(Paragraph("Sin ventas por categoría en este período.", styles["Normal"]))
     else:
@@ -322,7 +495,7 @@ def sales_report(
     if daily_totals:
         daily_data = [["Fecha", "Total"]]
         for day in sorted(daily_totals.keys()):
-            daily_data.append([day, _currency(daily_totals[day])])
+            daily_data.append([day, _currency(daily_totals[day], usd_rate)])
         story.append(_table(daily_data, [10 * cm, 5 * cm]))
     else:
         story.append(Paragraph("Sin datos para este período.", styles["Normal"]))
@@ -339,7 +512,7 @@ def sales_report(
                 o.date.strftime("%d/%m/%Y") if o.date else "",
                 o.client.name if o.client else "N/A",
                 o.status,
-                _currency(o.total),
+                _currency(o.total, usd_rate),
             ])
         story.append(_table(ord_data, [1.5 * cm, 3 * cm, 7 * cm, 2.5 * cm, 3 * cm]))
     else:
@@ -351,7 +524,7 @@ def sales_report(
 # ─── REPORTE CRM (leads + oportunidades) ──────────────────────────────────────
 
 @router.get("/crm")
-def crm_report(
+async def crm_report(
     start: date = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
     end: date = Query(..., description="Fecha fin (YYYY-MM-DD)"),
     db: Session = Depends(get_db),
@@ -397,9 +570,13 @@ def crm_report(
         sname = o.stage.name if o.stage else "Sin Etapa"
         stages_map[sname] = stages_map.get(sname, 0) + 1
 
+    rates = await _get_rates()
+    usd_rate = rates[0]
+
     buf, doc, story = _base_doc(
         "Reporte CRM",
-        f"Período: {start.strftime('%d/%m/%Y')} al {end.strftime('%d/%m/%Y')}  |  Leads captados: {len(leads)}"
+        f"Período: {start.strftime('%d/%m/%Y')} al {end.strftime('%d/%m/%Y')}  |  Leads captados: {len(leads)}",
+        rates=rates
     )
     styles = getSampleStyleSheet()
     h3 = ParagraphStyle("h3", parent=styles["Heading3"], fontSize=10, textColor=colors.HexColor("#1E293B"), spaceBefore=12, spaceAfter=6)
@@ -412,7 +589,7 @@ def crm_report(
         ["Total Oportunidades", str(len(opportunities))],
         ["Oportunidades Ganadas", str(len(won_opps))],
         ["Oportunidades Perdidas", str(len(lost_opps))],
-        ["Valor Total Estimado", _currency(total_opp_value)],
+        ["Valor Total Estimado", _currency(total_opp_value, usd_rate)],
     ]
     story.append(_table(data, [10 * cm, 5 * cm]))
     story.append(Spacer(1, 0.3 * cm))
@@ -442,10 +619,10 @@ def crm_report(
         lead_data = [["Nombre", "Email", "Fuente", "Estado", "Fecha"]]
         for l in leads:
             lead_data.append([
-                l.name,
-                l.email or "",
-                l.source or "",
-                l.status,
+                str(l.name or "N/A"),
+                str(l.email or ""),
+                str(l.source or ""),
+                str(l.status or ""),
                 l.created_at.strftime("%d/%m/%Y") if l.created_at else "",
             ])
         story.append(_table(lead_data, [5 * cm, 5 * cm, 3 * cm, 2.5 * cm, 3 * cm]))
@@ -458,7 +635,7 @@ def crm_report(
 # ─── REPORTE DE GASTOS / COMPRAS / CxP ───────────────────────────────────────
 
 @router.get("/expenses")
-def expenses_report(
+async def expenses_report(
     start: date = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
     end: date = Query(..., description="Fecha fin (YYYY-MM-DD)"),
     db: Session = Depends(get_db),
@@ -509,9 +686,13 @@ def expenses_report(
         cat = e.category or "Sin Categoría"
         by_cat[cat] = by_cat.get(cat, 0.0) + e.amount
 
+    rates = await _get_rates()
+    usd_rate = rates[0]
+
     buf, doc, story = _base_doc(
         "Reporte de Gastos, Compras y Cuentas por Pagar",
-        f"Período: {start.strftime('%d/%m/%Y')} al {end.strftime('%d/%m/%Y')}"
+        f"Período: {start.strftime('%d/%m/%Y')} al {end.strftime('%d/%m/%Y')}",
+        rates=rates
     )
     styles = getSampleStyleSheet()
     h3 = ParagraphStyle("h3", parent=styles["Heading3"], fontSize=10, textColor=colors.HexColor("#1E293B"), spaceBefore=12, spaceAfter=6)
@@ -520,17 +701,17 @@ def expenses_report(
     story.append(Paragraph("1. Resumen", h3))
     sum_data = [
         ["Concepto", "Monto"],
-        ["Total Gastos", _currency(total_expenses)],
-        ["Total Compras", _currency(total_purchases)],
-        ["Total Cuentas por Pagar (pendiente)", _currency(total_payables)],
-        ["TOTAL EGRESOS", _currency(total_expenses + total_purchases)],
+        ["Total Gastos", _currency(total_expenses, usd_rate)],
+        ["Total Compras", _currency(total_purchases, usd_rate)],
+        ["Total Cuentas por Pagar (pendiente)", _currency(total_payables, usd_rate)],
+        ["TOTAL EGRESOS", _currency(total_expenses + total_purchases, usd_rate)],
     ]
     t = _table(sum_data, [10 * cm, 5 * cm])
     t.setStyle(TableStyle([
         ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
         ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#FEF2F2")),
         ("TEXTCOLOR", (0, -1), (-1, -1), colors.HexColor("#991B1B")),
-    ]), overrideList=False)
+    ]))
     story.append(t)
     story.append(Spacer(1, 0.3 * cm))
 
@@ -538,7 +719,7 @@ def expenses_report(
     story.append(Paragraph("2. Gastos por Categoría", h3))
     cat_data = [["Categoría", "Monto"]]
     for cat, amt in sorted(by_cat.items()):
-        cat_data.append([cat, _currency(amt)])
+        cat_data.append([cat, _currency(amt, usd_rate)])
     if len(cat_data) == 1:
         story.append(Paragraph("Sin gastos en este período.", styles["Normal"]))
     else:
@@ -554,7 +735,7 @@ def expenses_report(
                 e.date.strftime("%d/%m/%Y") if e.date else "",
                 e.category or "",
                 (e.description or "")[:40],
-                _currency(e.amount),
+                _currency(e.amount, usd_rate),
             ])
         story.append(_table(exp_data, [3 * cm, 3.5 * cm, 8 * cm, 3 * cm]))
     else:
@@ -571,7 +752,7 @@ def expenses_report(
                 p.date.strftime("%d/%m/%Y") if p.date else "",
                 p.provider_name or "",
                 p.status,
-                _currency(p.total),
+                _currency(p.total, usd_rate),
             ])
         story.append(_table(pur_data, [1.5 * cm, 3 * cm, 7 * cm, 2.5 * cm, 3 * cm]))
     else:
@@ -585,10 +766,10 @@ def expenses_report(
         for p in payables:
             due_str = p.due_date.strftime("%d/%m/%Y") if p.due_date else ""
             pay_data.append([
-                p.provider.name if p.provider else "N/A",
-                p.reference or "",
+                str(p.provider.name) if p.provider and p.provider.name else "N/A",
+                str(p.reference or ""),
                 due_str,
-                _currency(p.amount),
+                _currency(p.amount, usd_rate),
             ])
         story.append(_table(pay_data, [5 * cm, 4 * cm, 4 * cm, 4 * cm]))
     else:

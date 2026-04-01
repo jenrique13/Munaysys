@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useOperativeStore } from '../../operative/hooks/useOperativeStore';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useFinancialStore } from '../hooks/useFinancialStore';
 import { Receipt, Search, FileText, Download, CheckCircle, AlertTriangle } from 'lucide-react';
 
@@ -9,10 +10,22 @@ const BillingPage: React.FC = () => {
 
     const [search, setSearch] = useState('');
     const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
+    const [searchParams] = useSearchParams();
+    const navigate = useNavigate();
+    const clientIdParam = searchParams.get('client_id');
+
+    const [statusFilter, setStatusFilter] = useState('all'); // all, paid, pending
+    const [monthFilter, setMonthFilter] = useState('all'); // YYYY-MM
 
     useEffect(() => {
         fetchClients();
     }, []);
+
+    useEffect(() => {
+        if (clientIdParam) {
+            setSelectedClientId(parseInt(clientIdParam));
+        }
+    }, [clientIdParam]);
 
     useEffect(() => {
         if (selectedClientId) {
@@ -20,7 +33,32 @@ const BillingPage: React.FC = () => {
         }
     }, [selectedClientId]);
 
+    const months = Array.from({ length: 12 }, (_, i) => {
+        const d = new Date();
+        d.setMonth(d.getMonth() - i);
+        return {
+            value: `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`,
+            label: d.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
+        };
+    });
+
     const filteredClients = clients.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
+
+    const visibleOrders = clientStatement?.orders.filter(o => {
+        const date = new Date(o.date);
+        const monthKey = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+        const matchesMonth = monthFilter === 'all' || monthKey === monthFilter;
+        const matchesStatus = statusFilter === 'all' || 
+            (statusFilter === 'paid' && o.status === 'paid') ||
+            (statusFilter === 'pending' && (o.status === 'pending' || o.status === 'partial'));
+        return matchesMonth && matchesStatus;
+    }) || [];
+
+    const visibleReceipts = clientStatement?.receipts.filter(r => {
+        const date = new Date(r.date);
+        const monthKey = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+        return monthFilter === 'all' || monthKey === monthFilter;
+    }) || [];
 
     const handlePrint = () => {
         window.print();
@@ -131,8 +169,37 @@ const BillingPage: React.FC = () => {
                                 {clientStatement.balance <= 0 ? (
                                     <div className="text-emerald-600 font-medium text-sm flex items-center justify-center gap-1.5"><CheckCircle size={16} /> Cuenta al día</div>
                                 ) : (
-                                    <div className="text-red-600 font-medium text-sm flex items-center justify-center gap-1.5"><AlertTriangle size={16} /> Pagos pendientes</div>
+                                    <div className="flex flex-col items-center gap-3">
+                                        <div className="text-red-600 font-medium text-sm flex items-center justify-center gap-1.5"><AlertTriangle size={16} /> Pagos pendientes</div>
+                                        <button 
+                                            onClick={() => navigate(`/orders?client_id=${selectedClientId}&status=pending`)}
+                                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-colors print:hidden"
+                                        >
+                                            Ir a Cobrar Deuda
+                                        </button>
+                                    </div>
                                 )}
+                            </div>
+                        </div>
+
+                        {/* Filtros de Estado de Cuenta */}
+                        <div className="flex gap-4 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-100 print:hidden text-sm">
+                            <div className="flex-1">
+                                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Filtrar por Mes</label>
+                                <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)}
+                                    className="w-full bg-white border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <option value="all">Todo el historial</option>
+                                    {months.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                                </select>
+                            </div>
+                            <div className="flex-1">
+                                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Estado de Órdenes</label>
+                                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+                                    className="w-full bg-white border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <option value="all">Todas las órdenes</option>
+                                    <option value="paid">Solo Pagadas</option>
+                                    <option value="pending">Solo con Deuda</option>
+                                </select>
                             </div>
                         </div>
 
@@ -150,9 +217,9 @@ const BillingPage: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {clientStatement.orders.length === 0 ? (
-                                        <tr><td colSpan={5} className="py-4 text-center text-gray-400">Sin historial de facturación.</td></tr>
-                                    ) : clientStatement.orders.map(o => (
+                                    {visibleOrders.length === 0 ? (
+                                        <tr><td colSpan={5} className="py-4 text-center text-gray-400">No se encontraron órdenes con estos filtros.</td></tr>
+                                    ) : visibleOrders.map(o => (
                                         <tr key={o.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50">
                                             <td className="py-3 px-3 text-gray-600">{new Date(o.date).toLocaleDateString()}</td>
                                             <td className="py-3 px-3 font-medium text-gray-800">ORD-{o.id.toString().padStart(5, '0')}</td>
@@ -183,14 +250,17 @@ const BillingPage: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {clientStatement.receipts.length === 0 ? (
-                                        <tr><td colSpan={5} className="py-4 text-center text-gray-400">Sin abonos registrados.</td></tr>
-                                    ) : clientStatement.receipts.map(r => (
+                                    {visibleReceipts.length === 0 ? (
+                                        <tr><td colSpan={5} className="py-4 text-center text-gray-400">No se encontraron abonos con estos filtros.</td></tr>
+                                    ) : visibleReceipts.map(r => (
                                         <tr key={r.id} className="border-b border-gray-50 last:border-0 hover:bg-emerald-50/30">
                                             <td className="py-3 px-3 text-gray-600">{new Date(r.date).toLocaleDateString()}</td>
                                             <td className="py-3 px-3 font-medium text-gray-800">{r.orden_id ? `ORD-${r.orden_id.toString().padStart(5, '0')}` : 'General'}</td>
                                             <td className="py-3 px-3 text-gray-500 text-xs">{(r as any).branch?.name || '---'}</td>
-                                            <td className="py-3 px-3 text-gray-600">{r.payment_method} <span className="text-gray-400 text-xs ml-1">({r.reference || 'N/A'})</span></td>
+                                            <td className="py-3 px-3 text-gray-600">
+                                                {typeof r.payment_method === 'object' ? r.payment_method.name : r.payment_method} 
+                                                <span className="text-gray-400 text-xs ml-1">({r.reference || 'N/A'})</span>
+                                            </td>
                                             <td className="py-3 px-3 font-bold text-emerald-600 text-right text-base">+${r.amount.toFixed(2)}</td>
                                         </tr>
                                     ))}

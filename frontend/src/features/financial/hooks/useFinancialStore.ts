@@ -37,11 +37,11 @@ interface FinancialState {
     fetchExpenses: (branchId?: number) => Promise<void>;
     fetchReceipts: (orderId?: number, purchaseId?: number) => Promise<void>;
     fetchClientStatement: (clientId: number) => Promise<ClientStatement | null>;
-    fetchReceivables: () => Promise<void>;
-    fetchCashMovements: () => Promise<void>;
+    fetchReceivables: (branchId?: number) => Promise<void>;
+    fetchCashMovements: (branchId?: number, month?: number, year?: number) => Promise<void>;
     fetchCashCategories: () => Promise<void>;
-    fetchFinancialSummary: () => Promise<void>;
-    fetchDashboardStats: () => Promise<void>;
+    fetchFinancialSummary: (branchId?: number, month?: number, year?: number) => Promise<void>;
+    fetchDashboardStats: (branchId?: number) => Promise<void>;
     fetchPaymentMethods: (branchId?: number) => Promise<void>;
 
     createProduct: (data: Partial<Product>) => Promise<boolean>;
@@ -134,10 +134,10 @@ export const useFinancialStore = create<FinancialState>((set, get) => ({
         } catch (e: any) { set({ error: e.message, isLoading: false }); }
     },
 
-    fetchCashMovements: async () => {
+    fetchCashMovements: async (branchId, month, year) => {
         set({ isLoading: true, error: null });
         try {
-            const cashMovements = await financialService.getCashMovements();
+            const cashMovements = await financialService.getCashMovements(branchId, month, year);
             set({ cashMovements, isLoading: false });
         } catch (e: any) { set({ error: e.message, isLoading: false }); }
     },
@@ -150,18 +150,18 @@ export const useFinancialStore = create<FinancialState>((set, get) => ({
         } catch (e: any) { set({ error: e.message, isLoading: false }); }
     },
 
-    fetchFinancialSummary: async () => {
+    fetchFinancialSummary: async (branchId, month, year) => {
         set({ isLoading: true, error: null });
         try {
-            const financialSummary = await financialService.getFinancialSummary();
+            const financialSummary = await financialService.getFinancialSummary(branchId, month, year);
             set({ financialSummary, isLoading: false });
         } catch (e: any) { set({ error: e.message, isLoading: false }); }
     },
 
-    fetchDashboardStats: async () => {
+    fetchDashboardStats: async (branchId) => {
         set({ isLoading: true, error: null });
         try {
-            const dashboardStats = await financialService.getDashboardStats();
+            const dashboardStats = await financialService.getDashboardStats(branchId);
             set({ dashboardStats, isLoading: false });
         } catch (e: any) { set({ error: e.message, isLoading: false }); }
     },

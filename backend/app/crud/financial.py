@@ -1,3 +1,4 @@
+from typing import Optional, List
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, cast, Date
 from app import models
@@ -609,8 +610,7 @@ def create_expense(db: Session, expense: schemas.ExpenseCreate):
     # Auto CashMovement
     provider_name = expense.provider
     if not provider_name and expense.provider_id:
-        from app import models as module_models
-        prov = db.query(module_models.Provider).filter(module_models.Provider.id == expense.provider_id).first()
+        prov = db.query(models.Provider).filter(models.Provider.id == expense.provider_id).first()
         if prov: provider_name = prov.name
         
     cm = models.CashMovement(
@@ -744,6 +744,16 @@ def update_document_payment_status(db: Session, model, document_id: int):
 
 def create_receipt(db: Session, receipt: schemas.ReceiptCreate):
     db_receipt = models.Receipt(**receipt.model_dump())
+    
+    # Auto-assign branch_id if not provided
+    if not db_receipt.branch_id:
+        if db_receipt.orden_id:
+            order = db.query(models.Orden).filter(models.Orden.id == db_receipt.orden_id).first()
+            if order: db_receipt.branch_id = order.branch_id
+        elif db_receipt.purchase_id:
+            purchase = db.query(models.Purchase).filter(models.Purchase.id == db_receipt.purchase_id).first()
+            if purchase: db_receipt.branch_id = purchase.branch_id
+    
     db.add(db_receipt)
     db.commit()
     db.refresh(db_receipt)
@@ -759,7 +769,7 @@ def create_receipt(db: Session, receipt: schemas.ReceiptCreate):
             if client: client_name = client.name
             
         cm = models.CashMovement(
-            branch_id=db_receipt.orden.branch_id if db_receipt.orden else 1,
+            branch_id=db_receipt.branch_id or (db_receipt.orden.branch_id if db_receipt.orden else (db.query(models.Branch).first().id if db.query(models.Branch).first() else 1)),
             amount=db_receipt.amount,
             type="income",
             category="Ventas",
@@ -779,7 +789,7 @@ def create_receipt(db: Session, receipt: schemas.ReceiptCreate):
             provider_name = purchase.provider_name
             
         cm = models.CashMovement(
-            branch_id=purchase.branch_id if purchase else 1,
+            branch_id=db_receipt.branch_id or (purchase.branch_id if purchase else (db.query(models.Branch).first().id if db.query(models.Branch).first() else 1)),
             amount=db_receipt.amount,
             type="expense",
             category="Compras",
@@ -827,10 +837,14 @@ def delete_cash_category(db: Session, category_id: int):
 
 # --- CASH MOVEMENTS ---
 
-def get_cash_movements(db: Session, branch_id: int, skip: int = 0, limit: int = 100):
-    q = db.query(models.CashMovement)
+def get_cash_movements(db: Session, branch_id: int, skip: int = 0, limit: int = 100, month: Optional[int] = None, year: Optional[int] = None):
+    q = db.query(models.CashMovement).options(joinedload(models.CashMovement.branch))
     if branch_id > 0:
         q = q.filter(models.CashMovement.branch_id == branch_id)
+    if month:
+        q = q.filter(func.extract('month', models.CashMovement.date) == month)
+    if year:
+        q = q.filter(func.extract('year', models.CashMovement.date) == year)
     return q.order_by(models.CashMovement.date.desc()).offset(skip).limit(limit).all()
 
 def create_cash_movement(db: Session, movement: schemas.CashMovementCreate):
@@ -864,32 +878,25 @@ def get_receivables_summary(db: Session, branch_id: int):
         func.sum(models.Receipt.amount).label("total_paid")
     ).filter(models.Receipt.type == "income")
     
-    # Filter receipts by branch if needed (though they should match orders)
-    # receipts don't have branch_id? Let's check models.py
-    # Re-checking models.py: Receipt does NOT have branch_id. 
-    # But we can join with Orden if we assume receipts are always tied to ordens, 
-    # but some are 'General'.
-    
-    # Actually, model Receipt DOES NOT have branch_id in models.py (line 371)
-    # Wait, looking at models.py again:
-    # class Receipt(Base): line 371
-    # class CashMovement(Base): line 510 (added by me)
+    if branch_id > 0:
+        payments_sub = payments_sub.filter(models.Receipt.branch_id == branch_id)
     
     payments_sub = payments_sub.group_by(models.Receipt.client_id).subquery()
     
     # 3. Join with Clients
+    # We want to see clients that have charges IN THIS BRANCH
     query = db.query(
         models.Client.id.label("client_id"),
         models.Client.name.label("client_name"),
         func.coalesce(charges_sub.c.total_charges, 0).label("total_charges"),
         func.coalesce(payments_sub.c.total_paid, 0).label("total_paid"),
         charges_sub.c.last_order_date
-    ).outerjoin(charges_sub, models.Client.id == charges_sub.c.client_id)\
+    ).join(charges_sub, models.Client.id == charges_sub.c.client_id)\
      .outerjoin(payments_sub, models.Client.id == payments_sub.c.client_id)
      
-    if branch_id > 0:
-        query = query.filter(models.Client.branch_id == branch_id)
-        
+    # Note: We use .join() instead of .outerjoin() for charges_sub 
+    # because if a client has no charges in this branch, they have no receivable here.
+    
     results = query.all()
     
     summary = []

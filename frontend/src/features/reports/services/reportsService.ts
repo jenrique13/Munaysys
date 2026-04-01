@@ -34,4 +34,10 @@ export const reportsService = {
 
   downloadExpensesReport: (start: string, end: string) =>
     downloadBlob(`/expenses?start=${start}&end=${end}`, `reporte_gastos_${start}_${end}.pdf`),
+
+  downloadCashFlowIncomeReport: (start: string, end: string) =>
+    downloadBlob(`/cashflow/income?start=${start}&end=${end}`, `reporte_ingresos_caja_${start}_${end}.pdf`),
+
+  downloadCashFlowExpenseReport: (start: string, end: string) =>
+    downloadBlob(`/cashflow/expense?start=${start}&end=${end}`, `reporte_egresos_caja_${start}_${end}.pdf`),
 };

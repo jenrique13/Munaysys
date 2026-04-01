@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from app import models
 from app.api import deps
@@ -520,9 +520,11 @@ def read_cash_movements(
     skip: int = 0,
     limit: int = 100,
     current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    target_branch_id: int = Depends(get_target_branch_id),
+    month: Optional[int] = None,
+    year: Optional[int] = None
 ):
-    return crud.get_cash_movements(db=db, branch_id=target_branch_id, skip=skip, limit=limit)
+    return crud.get_cash_movements(db=db, branch_id=target_branch_id, skip=skip, limit=limit, month=month, year=year)
 
 
 @router.post("/cash-movements", response_model=schemas.CashMovement)
@@ -541,7 +543,9 @@ def create_cash_movement(
 def get_financial_summary(
     db: Session = Depends(deps.get_db),
     current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    target_branch_id: int = Depends(get_target_branch_id),
+    month: Optional[int] = None,
+    year: Optional[int] = None
 ):
     """
     Returns a high-level summary of financial status for the branch.
@@ -565,6 +569,13 @@ def get_financial_summary(
     if branch_id > 0:
         q_income = q_income.filter(models.CashMovement.branch_id == branch_id)
         q_expense = q_expense.filter(models.CashMovement.branch_id == branch_id)
+        
+    if month:
+        q_income = q_income.filter(func.extract('month', models.CashMovement.date) == month)
+        q_expense = q_expense.filter(func.extract('month', models.CashMovement.date) == month)
+    if year:
+        q_income = q_income.filter(func.extract('year', models.CashMovement.date) == year)
+        q_expense = q_expense.filter(func.extract('year', models.CashMovement.date) == year)
         
     income = q_income.filter(models.CashMovement.type == "income").scalar() or 0.0
     expense = q_expense.filter(models.CashMovement.type == "expense").scalar() or 0.0

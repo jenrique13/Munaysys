@@ -2,21 +2,24 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from app import models
 from app.schemas import quotes as schemas
+from app.crud import operative as crud_operative
 
 TAX_RATE = 0.16  # 16% IVA
 
 
-def _recalculate_totals(items_data: list) -> tuple[float, float, float, float]:
-    """Returns (subtotal, discount_total, tax, total) from a list of item dicts."""
+def _recalculate_totals(items_data: list, header_discount: float = 0.0) -> tuple[float, float, float, float]:
+    """Returns (subtotal, item_discounts, tax, total) from a list of item dicts."""
     subtotal = sum(
         item.get("quantity", 1) * item.get("unit_price", 0.0)
         for item in items_data
     )
-    discount_total = sum(item.get("discount", 0.0) for item in items_data)
-    taxable = subtotal - discount_total
+    item_discounts = sum(item.get("discount", 0.0) for item in items_data)
+    
+    # Header discount is subtracted before tax for consistency with orders
+    taxable = subtotal - item_discounts - header_discount
     tax = round(taxable * TAX_RATE, 2)
     total = round(taxable + tax, 2)
-    return subtotal, discount_total, tax, total
+    return subtotal, item_discounts, tax, total
 
 
 # --- READ ---
@@ -44,7 +47,7 @@ def create_quote(db: Session, obj_in: schemas.QuoteCreate):
     for item in items_data:
         item["subtotal"] = round(item["quantity"] * item["unit_price"] - item["discount"], 2)
 
-    subtotal, discount_total, tax, total = _recalculate_totals(items_data)
+    subtotal, item_discounts, tax, total = _recalculate_totals(items_data, obj_in.discount)
 
     db_quote = models.Quote(
         branch_id=obj_in.branch_id,
@@ -53,7 +56,7 @@ def create_quote(db: Session, obj_in: schemas.QuoteCreate):
         client_id=obj_in.client_id,
         notes=obj_in.notes,
         expires_at=obj_in.expires_at,
-        discount=discount_total + obj_in.discount,  # item discounts + header discount
+        discount=item_discounts + obj_in.discount,  # item discounts + header discount
         subtotal=subtotal,
         tax=tax,
         total=total,
@@ -89,12 +92,17 @@ def update_quote(db: Session, quote_id: int, obj_in: schemas.QuoteUpdate):
             item["subtotal"] = round(item["quantity"] * item["unit_price"] - item.get("discount", 0.0), 2)
             db.add(models.QuoteItem(quote_id=quote_id, **item))
 
-        subtotal, discount_total, tax, total = _recalculate_totals(new_items)
+        # Get the new header discount if provided, else calculate it from old total
+        old_item_discounts = sum(it.discount for it in db_quote.items)
+        old_header_discount = db_quote.discount - old_item_discounts
+        header_discount = update_data.get("discount", old_header_discount)
+
+        subtotal, item_discounts, tax, total = _recalculate_totals(new_items, header_discount)
+        
         db_quote.subtotal = subtotal
         db_quote.tax = tax
         db_quote.total = total
-        if "discount" not in update_data:
-            db_quote.discount = discount_total
+        db_quote.discount = item_discounts + header_discount
 
     db.commit()
     db.refresh(db_quote)
@@ -124,27 +132,17 @@ def convert_to_order(db: Session, quote_id: int, client_id: Optional[int] = None
         return None, db_quote  # Already converted
 
     if not client_id:
-        if db_quote.lead_id:
+        if db_quote.client_id:
+            client_id = db_quote.client_id
+        elif db_quote.lead_id:
             lead = db.query(models.Lead).filter(models.Lead.id == db_quote.lead_id).first()
             if lead:
-                # See if client already exists from this lead
-                existing_client = db.query(models.Client).filter(models.Client.lead_id == lead.id).first()
-                if existing_client:
-                    client_id = existing_client.id
-                else:
-                    new_client = models.Client(
-                        name=lead.name,
-                        email=lead.email,
-                        phone=lead.phone,
-                        branch_id=db_quote.branch_id,
-                        lead_id=lead.id,
-                        status="active"
-                    )
-                    db.add(new_client)
-                    db.flush()
-                    client_id = new_client.id
+                # Usar el helper robusto para obtener o crear el cliente desde el lead
+                client = crud_operative.get_or_create_client_from_lead(db, lead)
+                client_id = client.id
+        
         if not client_id:
-            return None, None  # Or raise an exception, no client nor lead
+            return None, None  # No client nor lead to create one
 
     # Verify the client exists in the same branch
     client = db.query(models.Client).filter(
@@ -154,12 +152,20 @@ def convert_to_order(db: Session, quote_id: int, client_id: Optional[int] = None
     if not client:
         return None, None
 
+    # Fix for consistency with regular Orders:
+    # Orden.subtotal should be Sum of Net items (Gross - ItemDiscounts)
+    # Orden.discount should be header discount only
+    item_discounts = sum(it.discount for it in db_quote.items)
+    net_subtotal = db_quote.subtotal - item_discounts
+    header_discount = db_quote.discount - item_discounts
+
     # Create the Orden
     new_order = models.Orden(
         client_id=client_id,
         branch_id=db_quote.branch_id,
-        subtotal=db_quote.subtotal,
-        discount=db_quote.discount,
+        subtotal=net_subtotal,
+        discount=header_discount,
+        discount_type="amount",
         tax=db_quote.tax,
         total=db_quote.total,
         status="pending",

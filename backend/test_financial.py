@@ -18,7 +18,7 @@ def run_tests():
     # 1. Login to get token
     response = client.post(
         "/api/v1/auth/login",
-        data={"username": "admin3@munaysys.com", "password": "admin"}
+        data={"username": "admin3@munaysys.com", "password": "adminpassword"}
     )
     if response.status_code != 200:
         print(f"Error en login: {response.text}")

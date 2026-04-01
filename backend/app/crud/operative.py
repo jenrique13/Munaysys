@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 from app import models
 from app.schemas import operative as schemas
 from datetime import datetime
@@ -63,6 +63,63 @@ def update_client(db: Session, client_id: int, obj_in: schemas.ClientUpdate):
         db.commit()
         db.refresh(db_obj)
     return db_obj
+
+
+def get_or_create_client_from_lead(db: Session, lead: models.Lead) -> models.Client:
+    """
+    Busca un cliente existente por CI/RIF, Email o Nombre (case-insensitive) 
+    para evitar duplicados al convertir un Lead.
+    """
+    # 1. Buscar por CI/RIF (Si el lead lo tiene)
+    existing = None
+    if lead.ci_rif:
+        existing = db.query(models.Client).filter(
+            models.Client.branch_id == lead.branch_id,
+            models.Client.ci_rif == lead.ci_rif,
+            models.Client.status != "deleted"
+        ).first()
+
+    # 2. Buscar por Email (Case-insensitive)
+    if not existing and lead.email:
+        existing = db.query(models.Client).filter(
+            models.Client.branch_id == lead.branch_id,
+            func.lower(models.Client.email) == func.lower(lead.email),
+            models.Client.status != "deleted"
+        ).first()
+
+    # 3. Buscar por Nombre (Case-insensitive + Trim) - Menos fiable, pero ayuda
+    if not existing:
+        lead_name_clean = lead.name.strip().lower()
+        existing = db.query(models.Client).filter(
+            models.Client.branch_id == lead.branch_id,
+            func.lower(func.trim(models.Client.name)) == lead_name_clean,
+            models.Client.status != "deleted"
+        ).first()
+
+    if existing:
+        # Si existe, nos aseguramos de que el lead_id esté vinculado si estaba vacío
+        if not existing.lead_id:
+            existing.lead_id = lead.id
+            db.add(existing)
+            db.commit()
+            db.refresh(existing)
+        return existing
+
+    # 4. No existe: Crear nuevo cliente
+    new_client = models.Client(
+        name=lead.name,
+        email=lead.email,
+        phone=lead.phone,
+        ci_rif=lead.ci_rif,
+        branch_id=lead.branch_id,
+        lead_id=lead.id,
+        status="active",
+        notes=f"Cliente convertido desde Lead #{lead.id}. Empresa: {lead.company or 'N/A'}"
+    )
+    db.add(new_client)
+    db.commit()
+    db.refresh(new_client)
+    return new_client
 
 
 # ── OFFICES ─────────────────────────────────────────────────

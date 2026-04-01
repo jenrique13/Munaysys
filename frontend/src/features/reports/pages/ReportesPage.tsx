@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuthStore } from '../../auth/hooks/useAuthStore';
 import { reportsService } from '../services/reportsService';
 import {
-  FileBarChart2, Download, CalendarDays, TrendingUp, Wallet, AlertCircle, Loader2, FileText
+  FileBarChart2, Download, CalendarDays, TrendingUp, Wallet, AlertCircle, Loader2, FileText, Landmark, ArrowUpCircle, ArrowDownCircle
 } from 'lucide-react';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -89,6 +89,12 @@ const ReportesPage: React.FC = () => {
   const [expStart, setExpStart] = useState(monthStart);
   const [expEnd, setExpEnd] = useState(today);
   const [loadingExp, setLoadingExp] = useState(false);
+
+  // Cash Flow range
+  const [cfStart, setCfStart] = useState(monthStart);
+  const [cfEnd, setCfEnd] = useState(today);
+  const [loadingCfIncome, setLoadingCfIncome] = useState(false);
+  const [loadingCfExpense, setLoadingCfExpense] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -236,6 +242,43 @@ const ReportesPage: React.FC = () => {
                 loading={loadingExp}
                 color="#F59E0B"
                 onDownload={() => handleDownload(setLoadingExp, () => reportsService.downloadExpensesReport(expStart, expEnd))}
+              />
+            </div>
+          </section>
+        )}
+
+        {/* ── Reporte Flujo de Caja ───────────────────────────────────────── */}
+        {canSeeFinancialAdmin && (
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <Landmark size={16} className="text-blue-500" />
+              <h2 className="font-bold text-slate-800 text-base">Reportes de Flujo de Caja</h2>
+              <span className="ml-2 text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full uppercase tracking-wide">Finanzas · Gerencia · Super Admin</span>
+            </div>
+
+            {/* Range Picker */}
+            <div className="flex items-end gap-4 mb-4">
+              <DateInput label="Desde" value={cfStart} onChange={setCfStart} />
+              <DateInput label="Hasta" value={cfEnd} onChange={setCfEnd} />
+              <p className="text-[11px] text-slate-400 pb-2">Rango de fechas para reportes detallados de ingresos y egresos de caja.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              <ReportCard
+                icon={ArrowUpCircle}
+                title="Reporte de Ingresos de Caja"
+                description="Listado detallado de todos los ingresos registrados en el flujo de caja para el período seleccionado."
+                loading={loadingCfIncome}
+                color="#10B981"
+                onDownload={() => handleDownload(setLoadingCfIncome, () => reportsService.downloadCashFlowIncomeReport(cfStart, cfEnd))}
+              />
+              <ReportCard
+                icon={ArrowDownCircle}
+                title="Reporte de Egresos de Caja"
+                description="Listado detallado de todos los egresos y gastos registrados en el flujo de caja para el período seleccionado."
+                loading={loadingCfExpense}
+                color="#EF4444"
+                onDownload={() => handleDownload(setLoadingCfExpense, () => reportsService.downloadCashFlowExpenseReport(cfStart, cfEnd))}
               />
             </div>
           </section>

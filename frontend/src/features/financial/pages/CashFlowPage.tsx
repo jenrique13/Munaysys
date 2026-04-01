@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useFinancialStore } from '../hooks/useFinancialStore';
 import { useSystemStore } from '../../system/hooks/useSystemStore';
+import { useAuthStore } from '../../auth/hooks/useAuthStore';
 import { useOperativeStore } from '../../operative/hooks/useOperativeStore';
 import { useProvidersStore } from '../hooks/useProvidersStore';
 import { formatCurrency, formatBs } from '../../../utils/format';
@@ -13,14 +14,20 @@ import CategoryManagementModal from '../components/CategoryManagementModal';
 const CashFlowPage: React.FC = () => {
     const {
         cashMovements, financialSummary, cashCategories, isLoading, paymentMethods,
-        fetchCashMovements, fetchFinancialSummary, fetchCashCategories, createCashMovement
+        fetchCashMovements, fetchFinancialSummary, fetchCashCategories, createCashMovement,
+        fetchPaymentMethods
     } = useFinancialStore();
+    const { user, selectedBranchId } = useAuthStore();
     const { bcvRateUsd } = useSystemStore();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
+    
+    // Period filters
+    const [filterMonth, setFilterMonth] = useState<number>(new Date().getMonth() + 1);
+    const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
 
     const [formData, setFormData] = useState<{
         amount: number;
@@ -44,12 +51,13 @@ const CashFlowPage: React.FC = () => {
     const { providers, fetchProviders } = useProvidersStore();
 
     useEffect(() => {
-        fetchCashMovements();
-        fetchFinancialSummary();
+        fetchCashMovements(selectedBranchId || undefined, filterMonth, filterYear);
+        fetchFinancialSummary(selectedBranchId || undefined, filterMonth, filterYear);
         fetchCashCategories();
         fetchClients();
         fetchProviders();
-    }, [fetchCashMovements, fetchFinancialSummary, fetchCashCategories, fetchClients, fetchProviders]);
+        fetchPaymentMethods(selectedBranchId || undefined);
+    }, [fetchCashMovements, fetchFinancialSummary, fetchCashCategories, fetchClients, fetchProviders, fetchPaymentMethods, selectedBranchId, filterMonth, filterYear]);
 
     const filteredMovements = cashMovements.filter(m => {
         const matchesSearch = m.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -60,7 +68,10 @@ const CashFlowPage: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const success = await createCashMovement(formData);
+        const success = await createCashMovement({
+            ...formData,
+            branch_id: selectedBranchId || user?.branch_id || 1
+        });
         if (success) {
             setIsModalOpen(false);
             setFormData({ amount: 0, type: 'income', category: '', description: '', client_name: '', provider_name: '', payment_method: '' });
@@ -83,7 +94,9 @@ const CashFlowPage: React.FC = () => {
                             <DollarSign className="w-5 h-5 text-emerald-600" />
                         </div>
                         <div>
-                            <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider text-left">Efectivo en Caja</p>
+                            <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider text-left">
+                                {filterMonth ? 'Balance del Período' : 'Efectivo en Caja'}
+                            </p>
                             <div className="flex items-baseline gap-2">
                                 <p className="text-xl font-bold text-gray-900">
                                     {formatCurrency(financialSummary?.current_cash || 0)}
@@ -132,9 +145,36 @@ const CashFlowPage: React.FC = () => {
                             onChange={(e) => setFilterType(e.target.value as any)}
                             className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
                         >
-                            <option value="all">Tipos</option>
-                            <option value="income">Ingresos</option>
-                            <option value="expense">Egresos</option>
+                             <option value="all">Tipos</option>
+                             <option value="income">Ingresos</option>
+                             <option value="expense">Egresos</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div className="flex gap-2">
+                    <div className="flex-1 relative">
+                        <Calendar className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                        <select
+                            value={filterMonth}
+                            onChange={(e) => setFilterMonth(parseInt(e.target.value))}
+                            className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+                        >
+                            <option value={0}>Todos los meses</option>
+                            {["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"].map((m, i) => (
+                                <option key={m} value={i + 1}>{m}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="w-32 relative">
+                        <select
+                            value={filterYear}
+                            onChange={(e) => setFilterYear(parseInt(e.target.value))}
+                            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+                        >
+                            {[2024, 2025, 2026].map(y => (
+                                <option key={y} value={y}>{y}</option>
+                            ))}
                         </select>
                     </div>
                 </div>
@@ -153,6 +193,7 @@ const CashFlowPage: React.FC = () => {
                             <thead className="bg-gray-50">
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sede</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría / Entidad</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Monto</th>
@@ -166,6 +207,9 @@ const CashFlowPage: React.FC = () => {
                                                 <Calendar size={14} />
                                                 {new Date(m.date).toLocaleString()}
                                             </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-slate-500">
+                                            {m.branch?.name || `Sede #${m.branch_id}`}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className="px-2 py-1 text-[10px] font-bold uppercase rounded-md bg-gray-100 text-gray-600 block w-max mb-1">

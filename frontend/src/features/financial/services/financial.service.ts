@@ -179,24 +179,28 @@ export const financialService = {
     },
 
     // ── PHASE 6: NEW FEATURES ────────────────
-    getReceivables: async () => {
-        const res = await api.get<ReceivableSummary[]>(`${BASE}/receivables`);
+    getReceivables: async (branchId?: number) => {
+        const res = await api.get<ReceivableSummary[]>(`${BASE}/receivables`, { params: { branch_id: branchId } });
         return res.data;
     },
-    getCashMovements: async () => {
-        const res = await api.get<CashMovement[]>(`${BASE}/cash-movements`);
+    getCashMovements: async (branchId?: number, month?: number, year?: number) => {
+        const res = await api.get<CashMovement[]>(`${BASE}/cash-movements`, { 
+            params: { branch_id: branchId, month, year } 
+        });
         return res.data;
     },
     createCashMovement: async (data: Partial<CashMovement>) => {
         const res = await api.post<CashMovement>(`${BASE}/cash-movements`, data);
         return res.data;
     },
-    getFinancialSummary: async () => {
-        const res = await api.get<FinancialSummary>(`${BASE}/financial-summary`);
+    getFinancialSummary: async (branchId?: number, month?: number, year?: number) => {
+        const res = await api.get<FinancialSummary>(`${BASE}/financial-summary`, { 
+            params: { branch_id: branchId, month, year } 
+        });
         return res.data;
     },
-    getDashboardStats: async () => {
-        const res = await api.get<DashboardStats>(`${BASE}/dashboard-stats`);
+    getDashboardStats: async (branchId?: number) => {
+        const res = await api.get<DashboardStats>(`${BASE}/dashboard-stats`, { params: { branch_id: branchId } });
         return res.data;
     },
 

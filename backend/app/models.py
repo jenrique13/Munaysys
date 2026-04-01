@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, JSON, DateTime, func, Float
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, JSON, DateTime, func, Float, Date
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -13,6 +13,16 @@ class Branch(Base):
     config_json = Column(JSON, default={})
     is_active = Column(Boolean, default=True)
     color = Column(String, default="#6366f1")
+
+
+class ExchangeRate(Base):
+    __tablename__ = "exchange_rates"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(Date, unique=True, index=True, nullable=False)
+    usd_rate = Column(Float, nullable=False)
+    eur_rate = Column(Float, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class Role(Base):
@@ -415,6 +425,7 @@ class Receipt(Base):
     orden_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
     purchase_id = Column(Integer, ForeignKey("purchases.id"), nullable=True)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
     amount = Column(Float, nullable=False)
     exchange_rate = Column(Float, nullable=True)
     exchange_currency = Column(String, default="usd")
@@ -426,6 +437,7 @@ class Receipt(Base):
     orden = relationship("Orden", back_populates="receipts")
     purchase = relationship("Purchase", back_populates="receipts")
     client = relationship("Client")
+    branch = relationship("Branch")
 
 
 # --- PROVIDERS MODULE ---

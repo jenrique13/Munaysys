@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page {
+            size: A4;
+            margin: 1cm;
+        }
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            color: #0F172A;
+            font-size: 11pt;
+            line-height: 1.3;
+        }
+        .header-table {
+            width: 100%;
+            border-bottom: 2px solid #4F46E5;
+            margin-bottom: 15px;
+            padding-bottom: 5px;
+        }
+        .header-left h1 {
+            color: #4F46E5;
+            font-size: 18pt;
+            margin: 0;
+            font-weight: bold;
+        }
+        .header-left p {
+            color: #64748B;
+            font-size: 10pt;
+            margin: 2px 0;
+        }
+        .header-right {
+            text-align: right;
+            vertical-align: bottom;
+            font-size: 9pt;
+            color: #475569;
+        }
+        .summary-grid {
+            width: 100%;
+            margin-bottom: 15px;
+        }
+        .summary-card {
+            background-color: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+        .summary-label {
+            font-size: 9pt;
+            color: #64748B;
+            font-weight: bold;
+            display: block;
+            text-transform: uppercase;
+        }
+        .section-title {
+            font-size: 12pt;
+            font-weight: bold;
+            color: #1E293B;
+            margin-top: 15px;
+            margin-bottom: 8px;
+            border-left: 4px solid #4F46E5;
+            padding-left: 8px;
+            background-color: #F1F5F9;
+            padding-top: 4px;
+            padding-bottom: 4px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+        th {
+            background-color: #4F46E5;
+            color: white;
+            text-align: left;
+            padding: 6px 8px;
+            font-size: 10pt;
+        }
+        td {
+            border-bottom: 1px solid #E2E8F0;
+            padding: 6px 8px;
+            font-size: 10pt;
+            vertical-align: middle;
+        }
+        tr.even {
+            background-color: #F8FAFC;
+        }
+        .amount-cell {
+            text-align: right;
+        }
+        .currency-usd {
+            font-weight: bold;
+            display: block;
+        }
+        .currency-bs {
+            font-size: 8.5pt;
+            color: #64748B;
+            display: block;
+            margin-top: 1px;
+        }
+        .total-row {
+            background-color: #E2E8F0;
+            font-weight: bold;
+        }
+        .footer {
+            margin-top: 20px;
+            font-size: 8pt;
+            color: #94A3B8;
+            text-align: center;
+            border-top: 1px solid #E2E8F0;
+            padding-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <table class="header-table">
+        <tr>
+            <td class="header-left" style="border:none;">
+                <h1>Munaysys</h1>
+                <p>Reporte Diario de Ventas - {{ date }}</p>
+            </td>
+            <td class="header-right" style="border:none;">
+                <strong>Sede:</strong> {{ branch_name }}<br>
+                <strong>Tasa BCV:</strong> USD {{ usd_rate }} | EUR {{ eur_rate }}
+            </td>
+        </tr>
+    </table>
+
+    <table class="summary-grid" style="border:none;">
+        <tr>
+            <td width="33%" style="border:none; padding: 0 5px 0 0;">
+                <div class="summary-card">
+                    <span class="summary-label">Total Ventas</span>
+                    <span class="currency-usd">${{ "{:,.2f}".format(totals.total) }}</span>
+                    <span class="currency-bs">Bs {{ "{:,.2f}".format(totals.total * usd_rate) }}</span>
+                </div>
+            </td>
+            <td width="33%" style="border:none; padding: 0 5px;">
+                <div class="summary-card">
+                    <span class="summary-label">Total Ingresos</span>
+                    <span class="currency-usd">${{ "{:,.2f}".format(totals.income) }}</span>
+                    <span class="currency-bs">Bs {{ "{:,.2f}".format(totals.income * usd_rate) }}</span>
+                </div>
+            </td>
+            <td width="33%" style="border:none; padding: 0 0 0 5px;">
+                <div class="summary-card">
+                    <span class="summary-label">Deuda Pendiente</span>
+                    <span class="currency-usd">${{ "{:,.2f}".format(totals.total_debt) }}</span>
+                    <span class="currency-bs">Bs {{ "{:,.2f}".format(totals.total_debt * usd_rate) }}</span>
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <table class="summary-grid" style="border:none; margin-top: 5px;">
+        <tr>
+            <td style="border:none; padding: 0 5px 0 0;"><div class="summary-card"><span class="summary-label">Espacios</span><strong>${{ "{:,.2f}".format(totals.office) }}</strong></div></td>
+            <td style="border:none; padding: 0 5px;"><div class="summary-card"><span class="summary-label">Salas</span><strong>${{ "{:,.2f}".format(totals.room) }}</strong></div></td>
+            <td style="border:none; padding: 0 5px;"><div class="summary-card"><span class="summary-label">Productos</span><strong>${{ "{:,.2f}".format(totals.product) }}</strong></div></td>
+            <td style="border:none; padding: 0 5px;"><div class="summary-card"><span class="summary-label">Servicios</span><strong>${{ "{:,.2f}".format(totals.service) }}</strong></div></td>
+            <td style="border:none; padding: 0 0 0 5px;"><div class="summary-card"><span class="summary-label">Paquetes</span><strong>${{ "{:,.2f}".format(totals.package) }}</strong></div></td>
+        </tr>
+    </table>
+
+    <div class="section-title">1. Ingresos por Método de Pago</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Método de Pago</th>
+                <th class="amount-cell">Monto</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for method, amount in by_payment.items() %}
+            <tr class="{{ loop.cycle('odd', 'even') }}">
+                <td>{{ method }}</td>
+                <td class="amount-cell">
+                    <span class="currency-usd">${{ "{:,.2f}".format(amount) }}</span>
+                    <span class="currency-bs">Bs {{ "{:,.2f}".format(amount * usd_rate) }}</span>
+                </td>
+            </tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td>TOTAL INGRESOS</td>
+                <td class="amount-cell">
+                    <span class="currency-usd">${{ "{:,.2f}".format(totals.income) }}</span>
+                    <span class="currency-bs">Bs {{ "{:,.2f}".format(totals.income * usd_rate) }}</span>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="section-title">2. Listado de Órdenes del Día</div>
+    <table>
+        <thead>
+            <tr>
+                <th width="10%">#</th>
+                <th width="40%">Cliente</th>
+                <th width="20%">Estado</th>
+                <th width="15%" class="amount-cell">Total</th>
+                <th width="15%" class="amount-cell">Pagado</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for o in orders %}
+            <tr class="{{ loop.cycle('odd', 'even') }}">
+                <td>{{ o.id }}</td>
+                <td>{{ o.client_name }}</td>
+                <td>{{ o.status }}</td>
+                <td class="amount-cell">${{ "{:,.2f}".format(o.total) }}</td>
+                <td class="amount-cell">${{ "{:,.2f}".format(o.paid) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="section-title">3. Estado de Cuentas (Clientes con Deuda)</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Cliente</th>
+                <th class="amount-cell">Saldo Pendiente</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for client in debts %}
+            <tr class="{{ loop.cycle('odd', 'even') }}">
+                <td>{{ client.name }}</td>
+                <td class="amount-cell">
+                    <span class="currency-usd">${{ "{:,.2f}".format(client.balance) }}</span>
+                    <span class="currency-bs">Bs {{ "{:,.2f}".format(client.balance * usd_rate) }}</span>
+                </td>
+            </tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td>TOTAL DEUDA</td>
+                <td class="amount-cell">
+                    <span class="currency-usd">${{ "{:,.2f}".format(totals.total_debt) }}</span>
+                    <span class="currency-bs">Bs {{ "{:,.2f}".format(totals.total_debt * usd_rate) }}</span>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="footer">
+        Generado por Munaysys el {{ now }} | Página 1
+    </div>
+</body>
+</html>
