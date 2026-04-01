@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useClientStore } from '../store/clientStore';
 import { Sparkles, Calendar, Clock, CreditCard, ChevronRight, Activity } from 'lucide-react';
 import { format } from 'date-fns';
@@ -6,6 +7,7 @@ import { es } from 'date-fns/locale';
 
 export const DashboardPage: React.FC = () => {
   const { profile, statement, memberships, fetchStatement, fetchMemberships } = useClientStore();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchStatement();
@@ -60,9 +62,7 @@ export const DashboardPage: React.FC = () => {
            <p className="text-sm font-medium text-slate-500 flex items-center">
              <CreditCard size={14} className="mr-1" /> Corte al {format(new Date(), 'dd/MM/yyyy')}
            </p>
-           <div className="mt-6">
-              <button className="w-full bg-slate-900 text-white rounded-xl py-2.5 text-sm font-bold hover:bg-slate-800 transition-colors">Pagar Ahora</button>
-           </div>
+           
         </div>
 
         {/* Activity Summary */}
@@ -99,7 +99,7 @@ export const DashboardPage: React.FC = () => {
            
            <div className="space-y-4">
               <p className="text-center py-10 text-slate-400 text-sm italic font-medium">No tienes reservas pendientes.</p>
-              <button className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-slate-500 font-bold text-sm hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/30 transition-all">
+              <button onClick={() => navigate('/booking')} className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-slate-500 font-bold text-sm hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/30 transition-all">
                 + Nueva Reserva
               </button>
            </div>
@@ -109,7 +109,7 @@ export const DashboardPage: React.FC = () => {
             <div className="absolute top-[-20%] right-[-10%] w-[60%] h-[60%] bg-white/10 rounded-full blur-[80px]" />
             <h2 className="text-2xl font-bold mb-2 relative z-10">¿Necesitas una sala?</h2>
             <p className="text-indigo-100 mb-8 max-w-xs relative z-10">Reserva salas de reuniones o cabinas privadas directamente desde aquí.</p>
-            <button className="bg-white text-indigo-600 py-3.5 px-8 rounded-2xl font-bold text-sm shadow-xl hover:scale-105 active:scale-95 transition-all relative z-10">
+            <button onClick={() => navigate('/booking')} className="bg-white text-indigo-600 py-3.5 px-8 rounded-2xl font-bold text-sm shadow-xl hover:scale-105 active:scale-95 transition-all relative z-10">
               Ir a Reservas
             </button>
         </div>

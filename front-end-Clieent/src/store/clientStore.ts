@@ -30,6 +30,7 @@ interface ClientState {
     fetchMemberships: () => Promise<void>;
     fetchRooms: () => Promise<void>;
     createBooking: (data: any) => Promise<boolean>;
+    updateProfile: (id: number, data: any) => Promise<boolean>;
 }
 
 export const useClientStore = create<ClientState>((set, get) => ({
@@ -70,6 +71,15 @@ export const useClientStore = create<ClientState>((set, get) => ({
     createBooking: async (data) => {
         try {
             await api.post('/operative/bookings', data);
+            return true;
+        } catch (error) {
+            return false;
+        }
+    },
+    updateProfile: async (id, data) => {
+        try {
+            await api.put(`/operative/clients/${id}`, data);
+            get().fetchProfile();
             return true;
         } catch (error) {
             return false;

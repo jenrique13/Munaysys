@@ -21,11 +21,11 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>((set) => ({
     user: null,
-    isLoading: false,
+    isLoading: true,
     error: null,
     fetchCurrentUser: async () => {
         const token = localStorage.getItem('token');
-        if (!token) return;
+        if (!token) { set({ isLoading: false }); return; }
 
         set({ isLoading: true, error: null });
         try {
@@ -45,14 +45,14 @@ export const useAuthStore = create<AuthState>((set) => ({
 
             const response = await api.post('/auth/login', formData);
             localStorage.setItem('token', response.data.access_token);
-            
+
             const userResponse = await api.get('/auth/me');
             set({ user: userResponse.data, isLoading: false });
             return true;
         } catch (error: any) {
-            set({ 
-                error: error.response?.data?.detail || 'Error al iniciar sesión', 
-                isLoading: false 
+            set({
+                error: error.response?.data?.detail || 'Error al iniciar sesión',
+                isLoading: false
             });
             return false;
         }
