@@ -5,13 +5,16 @@ export type QuoteStatus = 'draft' | 'sent' | 'approved' | 'rejected' | 'converte
 export interface QuoteItem {
     id: number;
     quote_id: number;
-    item_type: 'product' | 'room' | 'office' | 'custom';
+    item_type: 'product' | 'room' | 'office' | 'custom' | 'service';
     item_id?: number | null;
     description: string;
     quantity: number;
     unit_price: number;
     discount: number;
     subtotal: number;
+    start_time?: string | null;
+    end_time?: string | null;
+    service_id?: number | null;
 }
 
 export interface QuoteItemCreate {
@@ -22,6 +25,9 @@ export interface QuoteItemCreate {
     unit_price: number;
     discount: number;
     subtotal: number;
+    start_time?: string | null;
+    end_time?: string | null;
+    service_id?: number | null;
 }
 
 export interface QuoteLead {
@@ -30,6 +36,7 @@ export interface QuoteLead {
     email?: string | null;
     company?: string | null;
     ci_rif?: string | null;
+    phone?: string | null;
 }
 
 export interface QuoteClient {
@@ -37,6 +44,7 @@ export interface QuoteClient {
     name: string;
     email?: string | null;
     ci_rif?: string | null;
+    phone?: string | null;
 }
 
 export interface Quote {
@@ -50,8 +58,10 @@ export interface Quote {
     expires_at?: string | null;
     subtotal: number;
     discount: number;
+    discount_type: 'amount' | 'percentage';
     tax: number;
     total: number;
+    apply_tax: boolean;
     converted_order_id?: number | null;
     created_at: string;
     items: QuoteItem[];
@@ -67,6 +77,8 @@ export interface QuoteCreate {
     notes?: string | null;
     expires_at?: string | null;
     discount: number;
+    discount_type: 'amount' | 'percentage';
+    apply_tax: boolean;
     items: QuoteItemCreate[];
 }
 
@@ -78,5 +90,7 @@ export interface QuoteUpdate {
     notes?: string | null;
     expires_at?: string | null;
     discount?: number;
+    discount_type?: 'amount' | 'percentage';
+    apply_tax?: boolean;
     items?: QuoteItemCreate[];
 }

@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page {
+            size: A4;
+            margin: 1cm;
+        }
+
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            color: #1E293B;
+            font-size: 9pt;
+            line-height: 1.4;
+            margin: 0;
+            padding: 0;
+        }
+
+        .header-container {
+            border-bottom: 2px solid #4F46E5;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+
+        .header-title {
+            color: #4F46E5;
+            font-size: 18pt;
+            margin: 0;
+            font-weight: bold;
+        }
+
+        .header-subtitle {
+            color: #64748B;
+            font-size: 10pt;
+            margin: 2px 0 0 0;
+        }
+
+        .summary-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 8px 0;
+            margin-bottom: 20px;
+        }
+
+        .summary-card {
+            background-color: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+            height: 55px;
+        }
+
+        .summary-card.highlight {
+            background-color: #EEF2FF;
+            border-color: #C7D2FE;
+        }
+
+        .summary-label {
+            font-size: 7pt;
+            color: #64748B;
+            font-weight: bold;
+            display: block;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+            letter-spacing: 0.5px;
+        }
+
+        .summary-value {
+            font-size: 13pt;
+            font-weight: bold;
+            color: #1E293B;
+            display: block;
+        }
+
+        .section-title {
+            font-size: 10.5pt;
+            font-weight: bold;
+            color: white;
+            background-color: #1E293B;
+            padding: 5px 10px;
+            margin: 20px 0 8px 0;
+            border-radius: 3px;
+        }
+
+        table.data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+
+        table.data-table th {
+            background-color: #F1F5F9;
+            color: #475569;
+            text-align: left;
+            padding: 4px 5px;
+            font-size: 8pt;
+            border-bottom: 2px solid #E2E8F0;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        table.data-table td {
+            border-bottom: 1px solid #F1F5F9;
+            padding: 4px 5px;
+            vertical-align: middle;
+        }
+
+        tr.even {
+            background-color: #FCFDFF;
+        }
+
+        tr.total-row {
+            background-color: #F8FAFC;
+            font-weight: bold;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .font-bold {
+            font-weight: bold;
+        }
+		
+        .text-emerald-600 {
+            color: #059669;
+        }
+
+        .text-red-600 {
+            color: #DC2626;
+        }
+
+        .footer {
+            margin-top: 30px;
+            font-size: 7pt;
+            color: #94A3B8;
+            text-align: center;
+            border-top: 1px solid #E2E8F0;
+            padding-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header-container">
+        <table style="width:100%; border:none;">
+            <tr>
+                <td style="padding: 0;">
+                    <h1 class="header-title">{{ title }}</h1>
+                    <p class="header-subtitle">Período: {{ date_range }}</p>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- SECCION: TOTALES GENERALES -->
+    <table class="summary-table">
+        <tr>
+            <td width="33.3%">
+                <div class="summary-card highlight">
+                    <span class="summary-label">Total Generado Global</span>
+                    <span class="summary-value">€{{ "{:,.2f}".format(global_total_paid + global_total_pending) }}</span>
+                </div>
+            </td>
+            <td width="33.3%">
+                <div class="summary-card">
+                    <span class="summary-label">Facturado / Pagado Global</span>
+                    <span class="summary-value" style="color: #059669;">€{{ "{:,.2f}".format(global_total_paid) }}</span>
+                </div>
+            </td>
+            <td width="33.3%">
+                <div class="summary-card">
+                    <span class="summary-label">Pendiente por Pagar Global</span>
+                    <span class="summary-value" style="color: #DC2626;">€{{ "{:,.2f}".format(global_total_pending) }}</span>
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    {% for branch in branches %}
+    <div class="section-title">Sede: {{ branch.name }}</div>
+    
+    <table class="summary-table">
+        <tr>
+            <td width="33.3%">
+                <div class="summary-card">
+                    <span class="summary-label">Total Generado (Sede)</span>
+                    <span class="summary-value">€{{ "{:,.2f}".format(branch.total_paid + branch.total_pending) }}</span>
+                </div>
+            </td>
+            <td width="33.3%">
+                <div class="summary-card">
+                    <span class="summary-label">Facturado / Pagado</span>
+                    <span class="summary-value" style="color: #059669;">€{{ "{:,.2f}".format(branch.total_paid) }}</span>
+                </div>
+            </td>
+            <td width="33.3%">
+                <div class="summary-card">
+                    <span class="summary-label">Pendiente por Pagar</span>
+                    <span class="summary-value" style="color: #DC2626;">€{{ "{:,.2f}".format(branch.total_pending) }}</span>
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th width="40%">Categoría</th>
+                <th width="30%" class="text-right">Pagado / Facturado</th>
+                <th width="30%" class="text-right">Pendiente por Pagar</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="even">
+                <td class="font-bold">Oficina Privada</td>
+                <td class="text-right text-emerald-600">€{{ "{:,.2f}".format(branch.paid_categories['Oficina Privada']) }}</td>
+                <td class="text-right text-red-600">€{{ "{:,.2f}".format(branch.pending_categories['Oficina Privada']) }}</td>
+            </tr>
+            <tr class="odd">
+                <td class="font-bold">Escritorios Fijos</td>
+                <td class="text-right text-emerald-600">€{{ "{:,.2f}".format(branch.paid_categories['Escritorios Fijos']) }}</td>
+                <td class="text-right text-red-600">€{{ "{:,.2f}".format(branch.pending_categories['Escritorios Fijos']) }}</td>
+            </tr>
+            <tr class="even">
+                <td class="font-bold">Espacios Compartidos</td>
+                <td class="text-right text-emerald-600">€{{ "{:,.2f}".format(branch.paid_categories['Espacios Compartidos']) }}</td>
+                <td class="text-right text-red-600">€{{ "{:,.2f}".format(branch.pending_categories['Espacios Compartidos']) }}</td>
+            </tr>
+            <tr class="odd">
+                <td class="font-bold">Salas</td>
+                <td class="text-right text-emerald-600">€{{ "{:,.2f}".format(branch.paid_categories['Salas']) }}</td>
+                <td class="text-right text-red-600">€{{ "{:,.2f}".format(branch.pending_categories['Salas']) }}</td>
+            </tr>
+            <tr class="even">
+                <td class="font-bold">Servicios</td>
+                <td class="text-right text-emerald-600">€{{ "{:,.2f}".format(branch.paid_categories['Servicios']) }}</td>
+                <td class="text-right text-red-600">€{{ "{:,.2f}".format(branch.pending_categories['Servicios']) }}</td>
+            </tr>
+            <tr class="odd">
+                <td class="font-bold">Otros / No Clasificado</td>
+                <td class="text-right text-emerald-600">€{{ "{:,.2f}".format(branch.paid_categories['Otros']) }}</td>
+                <td class="text-right text-red-600">€{{ "{:,.2f}".format(branch.pending_categories['Otros']) }}</td>
+            </tr>
+        </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td>Total General (Sede)</td>
+                <td class="text-right">€{{ "{:,.2f}".format(branch.total_paid) }}</td>
+                <td class="text-right">€{{ "{:,.2f}".format(branch.total_pending) }}</td>
+            </tr>
+        </tfoot>
+    </table>
+    {% endfor %}
+
+    {% if not branches %}
+    <div style="text-align: center; padding: 20px; color: #64748B;">
+        No hay datos de ventas registrados para este período.
+    </div>
+    {% endif %}
+
+    <div style="page-break-before: always;"></div>
+    
+    <div class="section-title">Detalle de las Órdenes</div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th width="10%">Orden</th>
+                <th width="15%">Fecha</th>
+                <th width="25%">Cliente</th>
+                <th width="35%">Descripción</th>
+                <th width="15%" class="text-right">Monto</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for o in orders_detail_list %}
+            <tr class="{{ loop.cycle('odd', 'even') }}">
+                <td class="font-bold">#{{ o.id }}</td>
+                <td>{{ o.date }}</td>
+                <td>{{ o.client_name }}</td>
+                <td style="font-size: 7.5pt; color: #475569;">{{ o.description }}</td>
+                <td class="text-right font-bold">€{{ "{:,.2f}".format(o.total) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td colspan="4">Total Órdenes</td>
+                <td class="text-right">€{{ "{:,.2f}".format(orders_detail_list | sum(attribute='total')) }}</td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <div class="section-title" style="margin-top: 30px;">Formas de Pago (Ingresos Recibidos)</div>
+    {% for method, data_item in orders_by_payment_method.items() %}
+    <h3 style="font-size: 10pt; color: #4F46E5; margin: 15px 0 5px 0;">Método: {{ method }}</h3>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th width="10%">Orden</th>
+                <th width="15%">Fecha Pago</th>
+                <th width="30%">Cliente</th>
+                <th width="30%">Descripción</th>
+                <th width="15%" class="text-right">Monto</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in data_item.payments %}
+            <tr class="{{ loop.cycle('odd', 'even') }}">
+                <td class="font-bold">#{{ p.order_id }}</td>
+                <td>{{ p.date }}</td>
+                <td>{{ p.client_name }}</td>
+                <td style="font-size: 7.5pt; color: #475569;">{{ p.description }}</td>
+                <td class="text-right">
+                    <div class="font-bold">Bs {{ "{:,.2f}".format(p.amount_bs) }}</div>
+                    <div style="font-size: 7.5pt; color: #64748B;">Tasa: {{ "{:,.2f}".format(p.rate) }}</div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td colspan="4">Total {{ method }}</td>
+                <td class="text-right text-emerald-600">
+                    {% for curr, total in data_item.totals.items() %}
+                    <div>{{ curr }} {{ "{:,.2f}".format(total) }}</div>
+                    {% endfor %}
+                </td>
+            </tr>
+        </tfoot>
+    </table>
+    {% else %}
+    <p style="font-size: 8pt; color: #64748B;">No hay pagos registrados en este período.</p>
+    {% endfor %}
+
+    <div class="footer">
+        Generado automáticamente por el Sistema Munaysys el {{ now }}.<br>
+    </div>
+</body>
+
+</html>

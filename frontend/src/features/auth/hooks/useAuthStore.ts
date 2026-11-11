@@ -22,6 +22,7 @@ interface AuthState {
     fetchCurrentUser: () => Promise<void>;
     login: (credentials: LoginParams) => Promise<boolean>;
     logout: () => void;
+    refreshToken: () => Promise<void>;
     clearError: () => void;
     setSelectedBranchId: (id: number | null) => void;
 }
@@ -73,6 +74,17 @@ export const useAuthStore = create<AuthState>((set) => ({
     logout: () => {
         localStorage.removeItem('token');
         set({ user: null });
+    },
+
+    refreshToken: async () => {
+        try {
+            const data = await authService.refreshToken();
+            localStorage.setItem('token', data.access_token);
+        } catch (error) {
+            console.error('Silent refresh failed', error);
+            // If refresh fails, we don't necessarily logout here, 
+            // the 401 interceptor will handle it if the token is truly dead.
+        }
     },
 
     clearError: () => set({ error: null })

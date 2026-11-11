@@ -1,123 +1,99 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-
+from fastapi import APIRouter, Depends, HTTPException
 from app import models
-from app.database import get_db
-from app.api.deps import get_current_user
-from app.schemas import providers as schemas
-from app.crud import providers as crud_providers
+from app.api import deps
+from app.api.deps import get_target_branch_id, get_uow
+from app.uow.unit_of_work import UnitOfWork
+from app.schemas.financial import providers as schemas
+from app.use_cases.financial.provider_use_cases import ProviderUseCases
+from app.use_cases.financial.get_financial_data import GetFinancialDataUseCase
 
 router = APIRouter()
-
-# --- PROVIDERS ---
 
 @router.get("/", response_model=List[schemas.Provider])
 def read_providers(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow)
 ):
-    branch_id = current_user.branch_id or 1
-    return crud_providers.get_providers(db, branch_id=branch_id, skip=skip, limit=limit)
+    return uow.providers.get_by_branch(target_branch_id, skip=skip, limit=limit)
 
-
-@router.get("/{provider_id}", response_model=schemas.Provider)
-def read_provider(
-    provider_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    provider = crud_providers.get_provider(db, provider_id)
-    if not provider:
-        raise HTTPException(status_code=404, detail="Proveedor no encontrado")
-    return provider
-
-
-@router.post("/", response_model=schemas.Provider, status_code=201)
+@router.post("/", response_model=schemas.Provider)
 def create_provider(
     provider_in: schemas.ProviderCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow)
 ):
-    return crud_providers.create_provider(db, provider_in)
+    data = provider_in.model_dump()
+    # Providers are global, branch_id is optional and should be None if 0
+    data["branch_id"] = target_branch_id if target_branch_id > 0 else None
+    
+    db_obj = uow.providers.create(data)
+    uow.commit()
+    uow.refresh(db_obj)
+    return db_obj
 
-
-@router.put("/{provider_id}", response_model=schemas.Provider)
-def update_provider(
-    provider_id: int,
-    provider_in: schemas.ProviderUpdate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    provider = crud_providers.update_provider(db, provider_id, provider_in)
-    if not provider:
-        raise HTTPException(status_code=404, detail="Proveedor no encontrado")
-    return provider
-
-
-@router.delete("/{provider_id}", status_code=204)
-def delete_provider(
-    provider_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    success = crud_providers.delete_provider(db, provider_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Proveedor no encontrado o no pudo eliminarse")
-    return None
-
-
-# --- PAYABLES ---
-
-@router.get("/payables/", response_model=List[schemas.Payable])
+@router.get("/payables", response_model=List[schemas.Payable])
 def read_payables(
-    provider_id: Optional[int] = Query(None),
+    provider_id: Optional[int] = None,
+    month: Optional[int] = None,
+    year: Optional[int] = None,
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow)
 ):
-    branch_id = current_user.branch_id or 1
-    return crud_providers.get_payables(db, branch_id=branch_id, provider_id=provider_id, skip=skip, limit=limit)
+    return uow.payables.get_by_branch(target_branch_id, provider_id=provider_id, month=month, year=year, skip=skip, limit=limit)
 
-
-@router.post("/payables/", response_model=schemas.Payable, status_code=201)
+@router.post("/payables", response_model=schemas.Payable)
 def create_payable(
     payable_in: schemas.PayableCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_uow)
 ):
-    # Verify provider exists
-    provider = crud_providers.get_provider(db, payable_in.provider_id)
-    if not provider:
-        raise HTTPException(status_code=404, detail="Proveedor no encontrado")
-    
-    payable_in.branch_id = current_user.branch_id or 1
-    return crud_providers.create_payable(db, payable_in)
-
+    use_case = ProviderUseCases(uow)
+    return use_case.create_payable(payable_in)
 
 @router.put("/payables/{payable_id}", response_model=schemas.Payable)
 def update_payable(
     payable_id: int,
     payable_in: schemas.PayableUpdate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_uow)
 ):
-    payable = crud_providers.update_payable(db, payable_id, payable_in)
-    if not payable:
-        raise HTTPException(status_code=404, detail="Cuenta por pagar no encontrada")
-    return payable
+    use_case = ProviderUseCases(uow)
+    updated = use_case.update_payable(payable_id, payable_in)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Payable not found")
+    return updated
 
-
-@router.delete("/payables/{payable_id}", status_code=204)
-def delete_payable(
-    payable_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+@router.get("/{provider_id}/statement", response_model=schemas.ProviderStatement)
+def get_provider_statement(
+    provider_id: int,
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    status: Optional[str] = None,
+    current_user: models.User = Depends(deps.get_current_user),
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow)
 ):
-    success = crud_providers.delete_payable(db, payable_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Cuenta por pagar no encontrada")
-    return None
+    # Role check: Coordinador, Gerencia (Gerente), Super Admin
+    privileged_roles = ["Super Administrador", "Gerente", "Coordinador"]
+    is_privileged = current_user.is_superuser or (current_user.role and current_user.role.name in privileged_roles)
+    
+    if not is_privileged:
+        raise HTTPException(
+            status_code=403, 
+            detail="No tiene permisos para ver el estado de cuenta del proveedor."
+        )
+        
+    use_case = GetFinancialDataUseCase(uow)
+    statement = use_case.get_provider_statement(
+        provider_id, 
+        branch_id=target_branch_id, 
+        month=month, 
+        year=year, 
+        status=status
+    )
+    if not statement:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    return statement

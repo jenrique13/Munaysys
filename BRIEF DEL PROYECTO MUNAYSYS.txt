@@ -1,0 +1,45 @@
+BRIEF DEL PROYECTO: MUNAYSYS (NEST COWORKING OS)
+=================================================
+1. ¿QUÉ ES MUNAYSYS?
+--------------------
+Munaysys es un sistema integral de planificación de recursos empresariales (ERP) y gestión de relaciones con clientes (CRM) diseñado específicamente para administrar espacios de Coworking y Centros de Negocios (como Nest Coworking). Su objetivo central es automatizar y centralizar la gestión operativa, financiera, de inventario y de reportes a lo largo de múltiples sedes o sucursales, operando bajo un complejo ecosistema multimoneda.
+2. STACK TECNOLÓGICO Y PLATAFORMA
+---------------------------------
+- Backend: Python 3.x con el framework FastAPI. Implementa una arquitectura limpia basada en "Unit of Work" (UoW), Repositorios y Casos de Uso (Use Cases) para separar la lógica de negocio.
+- Frontend: React 18+ con TypeScript, empaquetado con Vite. Utiliza TailwindCSS para un diseño de interfaz de usuario moderno, responsivo y altamente estilizado.
+- Estado Global (Frontend): Zustand (Stores como useOperativeStore, useFinancialStore, useSystemStore).
+- Servidor: Uvicorn (Backend - Puerto 8000) y Node.js/Vite (Frontend - Puerto local).
+- Generación de Reportes: xhtml2pdf (Backend - Python) y html2pdf.js (Frontend - React) para emisión de PDFs dinámicos.
+3. BASE DE DATOS
+----------------
+- Tipo: Base de datos SQL Relacional.
+- ORM: SQLAlchemy.
+- Modelado: Esquemas Pydantic rigurosos para validación de datos en las peticiones y respuestas de la API.
+4. MÓDULOS PRINCIPALES
+----------------------
+A. Módulo Operativo (Operative)
+   - Gestión de Clientes (CRM).
+   - Gestión de Membresías: Creación, seguimiento y estados (activa, vencida).
+   - Control de Espacios: Oficinas privadas, salas de reuniones (Rooms), puestos flotantes y categorías de espacios.
+   - Plantillas de Contratos: Generador de contratos legales (PDF) dinámicos según el tipo de espacio alquilado y anexos de personas autorizadas.
+   - Reservas (Bookings): Asignación de salas por bloque de tiempo.
+   - Amenidades: Gestión de servicios extras ligados a las membresías.
+B. Módulo Financiero (Financial)
+   - Órdenes (Ventas): Facturación de membresías, paquetes y servicios. Soporte para órdenes parciales, pendientes y pagadas.
+   - Presupuestos (Quotes): Emisión de cotizaciones que luego se convierten en órdenes formales y reservan los espacios.
+   - Recibos (Receipts) y Cobranza Consolidada: Interfaz avanzada para pagar múltiples deudas de un cliente de forma agrupada usando lógica FIFO (First In, First Out).
+   - Flujo de Caja (Cash Flow): Registro automático de ingresos y egresos.
+   - Multimoneda y Tributos: Manejo de Tasas BCV (USD, EUR), cálculo automatizado del impuesto IGTF (3%) para transacciones internacionales o en divisas (Zelle, Efectivo $, PayPal, etc.).
+   - Catálogo de Inventario: Productos, servicios, paquetes y consumibles.
+C. Módulo de Reportes (Reports) & Business Intelligence
+   - Dashboards Gerenciales: Paneles de Inteligencia de Negocios (simulación Power BI) con métricas críticas (MRR, Ocupación, Ventas por Categoría).
+   - Reportes PDF Automatizados: Reportes diarios, mensuales, flujo de caja y ventas por sucursal.
+D. Módulo de Sistema (System)
+   - Multi-sucursal: Aislamiento y cruce de datos dependiendo de la sucursal (Branch) activa del usuario.
+   - Roles y Autenticación: Control de acceso para Super Administradores, Gerentes, Ventas, etc.
+5. CASOS DE USO CLAVE
+---------------------
+- "Onboarding" de Coworkers: El usuario registra a un cliente, le asigna una oficina, se autogenera la orden de venta (con su respectiva factura) y se imprime automáticamente el contrato de arrendamiento en formato legal combinando las plantillas HTML con los datos del cliente.
+- Cobranza Inteligente: Un cliente posee facturas pendientes de enero y marzo. Al realizar un abono parcial, el sistema asigna el monto a la factura de enero saldándola y deja el remanente de deuda en marzo, generando recibos contables perfectos.
+- Gestión de IGTF en Tiempo Real: Si el cliente decide pagar en "Efectivo $", el sistema calcula sobre la marcha el 3% de impuesto (IGTF) ajustando el gran total a cobrar en la moneda local según la tasa del día, asegurando la cuadratura del flujo de caja.
+- Conversión Presupuesto a Venta: Un cliente solicita usar la sala de reuniones. El sistema emite la cotización. Al ser aprobada, convierte la cotización en una Venta y al mismo tiempo bloquea el calendario de la sala, evitando overbooking.

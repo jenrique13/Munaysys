@@ -1,13 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Header
 from typing import List, Optional
+from datetime import datetime
 
 from app import models
 from app.api import deps
-from app.api.deps import get_target_branch_id, get_current_client
+from app.api.deps import get_target_branch_id, get_uow
 from app.schemas import financial as schemas
-from app.crud import financial as crud
+from app.uow.unit_of_work import UnitOfWork
+from app.use_cases.financial import (
+    GetFinancialDataUseCase,
+    OrderUseCases,
+    PaymentUseCases,
+    InventoryUseCases,
+    DashboardUseCases
+)
 
 router = APIRouter()
 
@@ -15,601 +21,671 @@ router = APIRouter()
 
 @router.get("/products", response_model=List[schemas.Product])
 def read_products(
-    db: Session = Depends(deps.get_db),
     skip: int = 0,
     limit: int = 100,
-    current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    return crud.get_products(db=db, branch_id=target_branch_id, skip=skip, limit=limit)
+    use_case = GetFinancialDataUseCase(uow)
+    return use_case.get_products(target_branch_id, skip=skip, limit=limit)
 
 @router.post("/products", response_model=schemas.Product)
 def create_product(
-    product: schemas.ProductCreate,
-    db: Session = Depends(deps.get_db),
+    product_in: schemas.ProductCreate,
     current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    if not product.branch_id:
-        product.branch_id = target_branch_id or current_user.branch_id or 1
-    return crud.create_product(db=db, product=product)
+    if not product_in.branch_id:
+        product_in.branch_id = target_branch_id or current_user.branch_id or 1
+    
+    db_product = uow.products.create(product_in.model_dump())
+    uow.commit()
+    uow.refresh(db_product)
+    return db_product
 
 @router.put("/products/{product_id}", response_model=schemas.Product)
 def update_product(
     product_id: int,
-    product: schemas.ProductCreate,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
+    product_in: schemas.ProductCreate,
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    db_prod = crud.update_product(db=db, product_id=product_id, product_in=product)
-    if not db_prod:
+    db_product = uow.products.get(product_id)
+    if not db_product:
         raise HTTPException(status_code=404, detail="Product not found")
-    return db_prod
+    
+    uow.products.update(db_product, product_in.model_dump())
+    uow.commit()
+    uow.refresh(db_product)
+    return db_product
 
 @router.delete("/products/{product_id}")
 def delete_product(
     product_id: int,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    success = crud.delete_product(db=db, product_id=product_id)
-    if not success:
+    if not uow.products.remove(product_id):
         raise HTTPException(status_code=404, detail="Product not found")
+    uow.commit()
     return {"ok": True}
 
 # --- SERVICES ---
 
 @router.get("/services", response_model=List[schemas.Service])
 def read_services(
-    db: Session = Depends(deps.get_db),
     skip: int = 0,
     limit: int = 100,
-    current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    return crud.get_services(db=db, branch_id=target_branch_id, skip=skip, limit=limit)
+    use_case = GetFinancialDataUseCase(uow)
+    return use_case.get_services(target_branch_id, skip=skip, limit=limit)
 
 @router.post("/services", response_model=schemas.Service)
 def create_service(
-    service: schemas.ServiceCreate,
-    db: Session = Depends(deps.get_db),
+    service_in: schemas.ServiceCreate,
     current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    if not service.branch_id:
-        service.branch_id = target_branch_id or current_user.branch_id or 1
-    return crud.create_service(db=db, service=service)
+    if not service_in.branch_id:
+        service_in.branch_id = target_branch_id or current_user.branch_id or 1
+    
+    db_service = uow.services.create(service_in.model_dump())
+    uow.commit()
+    uow.refresh(db_service)
+    return db_service
 
-@router.put("/services/{service_id}", response_model=schemas.Service)
+@router.put("/services/{id}", response_model=schemas.Service)
 def update_service(
-    service_id: int,
-    service: schemas.ServiceCreate,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
+    id: int,
+    service_in: schemas.ServiceCreate,
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    db_svc = crud.update_service(db=db, service_id=service_id, params=service)
-    if not db_svc:
+    db_service = uow.services.get(id)
+    if not db_service:
         raise HTTPException(status_code=404, detail="Service not found")
-    return db_svc
+    
+    uow.services.update(db_service, service_in.model_dump())
+    uow.commit()
+    uow.refresh(db_service)
+    return db_service
 
-@router.delete("/services/{service_id}")
+@router.delete("/services/{id}")
 def delete_service(
-    service_id: int,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
+    id: int,
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    if not crud.delete_service(db=db, service_id=service_id):
+    if not uow.services.remove(id):
         raise HTTPException(status_code=404, detail="Service not found")
+    uow.commit()
     return {"ok": True}
 
 # --- CONSUMABLE CATEGORIES ---
 
 @router.get("/consumable-categories", response_model=List[schemas.ConsumableCategory])
 def read_consumable_categories(
-    db: Session = Depends(deps.get_db),
     skip: int = 0,
     limit: int = 100,
-    current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    return crud.get_consumable_categories(db=db, branch_id=target_branch_id, skip=skip, limit=limit)
+    # Using the generic repository's get_all or get_by_branch
+    if hasattr(uow.consumable_categories, 'get_by_branch'):
+        return uow.consumable_categories.get_by_branch(target_branch_id, skip, limit)
+    else:
+        # Fallback to get_all if get_by_branch doesn't exist
+        cats = uow.consumable_categories.get_all(skip, limit)
+        return [c for c in cats if c.branch_id == target_branch_id]
 
 @router.post("/consumable-categories", response_model=schemas.ConsumableCategory)
 def create_consumable_category(
-    category: schemas.ConsumableCategoryCreate,
-    db: Session = Depends(deps.get_db),
+    category_in: schemas.ConsumableCategoryCreate,
     current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    if not category.branch_id:
-        category.branch_id = target_branch_id or current_user.branch_id or 1
-    return crud.create_consumable_category(db=db, category=category)
-
-@router.put("/consumable-categories/{category_id}", response_model=schemas.ConsumableCategory)
-def update_consumable_category(
-    category_id: int,
-    category: schemas.ConsumableCategoryCreate,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
-):
-    if not category.branch_id:
-        category.branch_id = current_user.branch_id or 1
-    db_cat = crud.update_consumable_category(db=db, category_id=category_id, params=category)
-    if not db_cat:
-        raise HTTPException(status_code=404, detail="Category not found")
+    if not category_in.branch_id:
+        category_in.branch_id = target_branch_id or current_user.branch_id or 1
+    
+    db_cat = uow.consumable_categories.create(category_in.model_dump())
+    uow.commit()
+    uow.refresh(db_cat)
     return db_cat
 
-@router.delete("/consumable-categories/{category_id}")
-def delete_consumable_category(
-    category_id: int,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
+@router.put("/consumable-categories/{id}", response_model=schemas.ConsumableCategory)
+def update_consumable_category(
+    id: int,
+    category_in: schemas.ConsumableCategoryCreate,
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    if not crud.delete_consumable_category(db=db, category_id=category_id):
+    db_cat = uow.consumable_categories.get(id)
+    if not db_cat:
         raise HTTPException(status_code=404, detail="Category not found")
+    
+    uow.consumable_categories.update(db_cat, category_in.model_dump())
+    uow.commit()
+    uow.refresh(db_cat)
+    return db_cat
+
+@router.delete("/consumable-categories/{id}")
+def delete_consumable_category(
+    id: int,
+    uow: UnitOfWork = Depends(get_uow),
+):
+    if not uow.consumable_categories.remove(id):
+        raise HTTPException(status_code=404, detail="Category not found")
+    uow.commit()
     return {"ok": True}
 
 # --- CONSUMABLES ---
 
 @router.get("/consumables", response_model=List[schemas.Consumable])
 def read_consumables(
-    db: Session = Depends(deps.get_db),
     skip: int = 0,
     limit: int = 100,
-    current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    return crud.get_consumables(db=db, branch_id=target_branch_id, skip=skip, limit=limit)
+    use_case = GetFinancialDataUseCase(uow)
+    return uow.consumables.get_by_branch(target_branch_id, skip, limit)
 
 @router.post("/consumables", response_model=schemas.Consumable)
 def create_consumable(
-    item: schemas.ConsumableCreate,
-    db: Session = Depends(deps.get_db),
+    consumable_in: schemas.ConsumableCreate,
     current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    if not item.branch_id:
-        item.branch_id = target_branch_id or current_user.branch_id or 1
-    return crud.create_consumable(db=db, item=item)
+    if not consumable_in.branch_id:
+        consumable_in.branch_id = target_branch_id or current_user.branch_id or 1
+    
+    db_consumable = uow.consumables.create(consumable_in.model_dump())
+    uow.commit()
+    uow.refresh(db_consumable)
+    return db_consumable
 
-@router.put("/consumables/{item_id}", response_model=schemas.Consumable)
+@router.put("/consumables/{id}", response_model=schemas.Consumable)
 def update_consumable(
-    item_id: int,
-    item: schemas.ConsumableCreate,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
+    id: int,
+    consumable_in: schemas.ConsumableCreate,
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    db_item = crud.update_consumable(db=db, item_id=item_id, params=item)
-    if not db_item:
+    db_consumable = uow.consumables.get(id)
+    if not db_consumable:
         raise HTTPException(status_code=404, detail="Consumable not found")
-    return db_item
+    
+    uow.consumables.update(db_consumable, consumable_in.model_dump())
+    uow.commit()
+    uow.refresh(db_consumable)
+    return db_consumable
 
-@router.delete("/consumables/{item_id}")
+@router.delete("/consumables/{id}")
 def delete_consumable(
-    item_id: int,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
+    id: int,
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    if not crud.delete_consumable(db=db, item_id=item_id):
+    if not uow.consumables.remove(id):
         raise HTTPException(status_code=404, detail="Consumable not found")
+    uow.commit()
     return {"ok": True}
 
-# --- CONSUMABLE USAGE ---
-
-@router.get("/consumable-usage", response_model=List[schemas.ConsumableUsage])
-def read_consumable_usages(
-    db: Session = Depends(deps.get_db),
-    skip: int = 0,
-    limit: int = 100,
-    current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
-):
-    return crud.get_consumable_usages(db=db, branch_id=target_branch_id, skip=skip, limit=limit)
-
 @router.post("/consumable-usage", response_model=schemas.ConsumableUsage)
-def create_consumable_usage(
-    usage: schemas.ConsumableUsageCreate,
-    db: Session = Depends(deps.get_db),
+def record_usage(
+    usage_in: schemas.ConsumableUsageCreate,
     current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    if not usage.branch_id:
-        usage.branch_id = target_branch_id or current_user.branch_id or 1
-    return crud.create_consumable_usage(db=db, usage=usage, user_email=current_user.email)
+    use_case = InventoryUseCases(uow)
+    return use_case.record_usage(usage_in, user_email=current_user.email)
 
-# --- VENTAS (ORDERS) ---
+# --- ORDERS (VENTAS) ---
 
 @router.get("/orders", response_model=List[schemas.Orden])
 def read_orders(
-    db: Session = Depends(deps.get_db),
     skip: int = 0,
     limit: int = 100,
-    current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    return crud.get_orders(db=db, branch_id=target_branch_id, skip=skip, limit=limit)
+    use_case = GetFinancialDataUseCase(uow)
+    return use_case.get_orders(target_branch_id, skip=skip, limit=limit, search=search, status=status)
 
 @router.post("/orders", response_model=schemas.Orden)
 def create_order(
-    order: schemas.OrdenCreate,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    order_in: schemas.OrdenCreate,
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    if not order.branch_id:
-        order.branch_id = target_branch_id or current_user.branch_id or 1
-    return crud.create_order(
-        db=db,
-        order=order,
-        user_id=current_user.id,
-        user_email=current_user.email
-    )
+    use_case = OrderUseCases(uow)
+    db_order = use_case.create(order_in)
+    uow.commit()
+    uow.refresh(db_order)
+    return db_order
+
+@router.get("/orders/{order_id}", response_model=schemas.Orden)
+def read_order(
+    order_id: int,
+    uow: UnitOfWork = Depends(get_uow),
+):
+    use_case = GetFinancialDataUseCase(uow)
+    order = use_case.get_order_details(order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return order
+
+@router.get("/orders/{order_id}/logs")
+def get_order_logs(
+    order_id: int,
+    uow: UnitOfWork = Depends(get_uow),
+):
+    db_order = uow.orders.get(order_id)
+    if not db_order:
+        raise HTTPException(status_code=404, detail="Order not found")
+        
+    logs = uow.db.query(models.OrderAuditLog).filter(
+        models.OrderAuditLog.orden_id == order_id
+    ).order_by(models.OrderAuditLog.created_at.desc()).all()
+    
+    return [
+        {
+            "id": log.id,
+            "action": log.action,
+            "reason": log.reason,
+            "changes": log.changes_json,
+            "created_at": log.created_at,
+            "user_email": log.user.email if log.user else "Sistema",
+            "user_id": log.user_id
+        }
+        for log in logs
+    ]
 
 @router.put("/orders/{order_id}", response_model=schemas.Orden)
 def update_order(
     order_id: int,
     order_in: schemas.OrdenUpdate,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
+    current_user: models.User = Depends(deps.get_current_user),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    order = crud.update_order(
-        db=db,
-        order_id=order_id,
-        order_in=order_in,
-        user_id=current_user.id,
-        user_email=current_user.email
-    )
-    if not order:
-        raise HTTPException(status_code=404, detail="Orden no encontrada")
-    return order
+    use_case = OrderUseCases(uow)
+    try:
+        updated_order = use_case.update(order_id, order_in, user_email=current_user.email)
+        if not updated_order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        uow.commit()
+        uow.refresh(updated_order)
+        return updated_order
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-@router.delete("/orders/{order_id}", status_code=204)
+@router.delete("/orders/{order_id}")
 def delete_order(
     order_id: int,
-    reason: str,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
-):
-    success = crud.delete_order(db=db, order_id=order_id, user_id=current_user.id, reason=reason)
-    if not success:
-        raise HTTPException(status_code=404, detail="Orden no encontrada o no pudo eliminarse")
-    return None
-
-from app.schemas import orders_audit as audit_schemas
-
-@router.get("/orders/{order_id}/logs", response_model=List[audit_schemas.OrderAuditLogOut])
-def read_order_logs(
-    order_id: int,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
-):
-    logs = crud.get_order_logs(db=db, order_id=order_id)
-    # Map user info
-    for log in logs:
-        if log.user:
-            log.user_email = log.user.email
-    return logs
-
-@router.get("/clients/me/statement")
-def read_client_statement_me(
-    db: Session = Depends(deps.get_db),
-    current_client: models.Client = Depends(get_current_client)
-):
-    """Retorna el estado de cuenta del cliente logueado."""
-    return crud.get_client_statement(db=db, client_id=current_client.id)
-
-
-@router.get("/clients/{client_id}/statement")
-def read_client_statement(
-    client_id: int,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
-):
-    return crud.get_client_statement(db=db, client_id=client_id)
-
-
-# --- PURCHASES (COMPRAS) ---
-
-@router.get("/purchases", response_model=List[schemas.Purchase])
-def read_purchases(
-    db: Session = Depends(deps.get_db),
-    skip: int = 0,
-    limit: int = 100,
+    reason: Optional[str] = Query(None),
     current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    return crud.get_purchases(db=db, branch_id=target_branch_id, skip=skip, limit=limit)
+    use_case = OrderUseCases(uow)
+    if not use_case.delete(order_id, user_email=current_user.email, reason=reason):
+        raise HTTPException(status_code=404, detail="Order not found")
+    return {"ok": True}
 
-@router.post("/purchases", response_model=schemas.Purchase)
-def create_purchase(
-    purchase: schemas.PurchaseCreate,
-    db: Session = Depends(deps.get_db),
+# --- RECEIPTS (PAGOS) ---
+
+@router.post("/receipts", response_model=schemas.Receipt)
+def record_payment(
+    receipt_in: schemas.ReceiptCreate,
+    idempotency_key: str = Header(..., alias="Idempotency-Key"),
+    uow: UnitOfWork = Depends(get_uow),
+):
+    if idempotency_key:
+        existing_key = uow.db.query(models.IdempotencyKey).filter_by(key=idempotency_key).first()
+        if existing_key:
+            raise HTTPException(status_code=409, detail="Operación duplicada: Idempotency-Key ya procesado.")
+        
+        ik = models.IdempotencyKey(key=idempotency_key, request_path="/api/financial/receipts")
+        uow.db.add(ik)
+        uow.db.flush()
+
+    use_case = PaymentUseCases(uow)
+    return use_case.record_receipt(receipt_in)
+
+@router.post("/client-payments", response_model=List[schemas.Receipt])
+def record_client_payment(
+    payment_in: schemas.ClientPaymentCreate,
+    idempotency_key: str = Header(..., alias="Idempotency-Key"),
+    target_branch_id: int = Depends(get_target_branch_id),
     current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    if not purchase.branch_id:
-        purchase.branch_id = target_branch_id or current_user.branch_id or 1
-    return crud.create_purchase(db=db, purchase=purchase)
+    if idempotency_key:
+        existing_key = uow.db.query(models.IdempotencyKey).filter_by(key=idempotency_key).first()
+        if existing_key:
+            raise HTTPException(status_code=409, detail="Operación duplicada: Idempotency-Key ya procesado.")
+        
+        ik = models.IdempotencyKey(key=idempotency_key, request_path="/api/financial/client-payments")
+        uow.db.add(ik)
+        uow.db.flush()
 
+    if not payment_in.branch_id:
+        payment_in.branch_id = target_branch_id or current_user.branch_id or 1
+    use_case = PaymentUseCases(uow)
+    try:
+        return use_case.record_client_payment(payment_in)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-# --- EXPENSES (GASTOS) ---
+# --- EXPENSES ---
 
 @router.get("/expenses", response_model=List[schemas.Expense])
 def read_expenses(
-    db: Session = Depends(deps.get_db),
     skip: int = 0,
     limit: int = 100,
-    current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    return crud.get_expenses(db=db, branch_id=target_branch_id, skip=skip, limit=limit)
+    use_case = GetFinancialDataUseCase(uow)
+    return use_case.get_expenses(target_branch_id, skip=skip, limit=limit)
 
 @router.post("/expenses", response_model=schemas.Expense)
 def create_expense(
-    expense: schemas.ExpenseCreate,
-    db: Session = Depends(deps.get_db),
+    expense_in: schemas.ExpenseCreate,
     current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    if not expense.branch_id:
-        expense.branch_id = target_branch_id or current_user.branch_id or 1
-    return crud.create_expense(db=db, expense=expense)
+    from app.use_cases.financial.expense_use_cases import ExpenseUseCases
+    use_case = ExpenseUseCases(uow)
+    return use_case.create_expense(expense_in, current_user_branch_id=target_branch_id or current_user.branch_id or 1)
 
+# --- PURCHASES ---
 
-# --- RECEIPTS (PAGOS Y ABONOS) ---
-
-@router.get("/receipts", response_model=List[schemas.Receipt])
-def read_receipts(
-    db: Session = Depends(deps.get_db),
-    order_id: int = None,
-    purchase_id: int = None,
+@router.get("/purchases", response_model=List[schemas.Purchase])
+def read_purchases(
     skip: int = 0,
     limit: int = 100,
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
+):
+    use_case = GetFinancialDataUseCase(uow)
+    return use_case.get_purchases(target_branch_id, skip=skip, limit=limit)
+
+@router.post("/purchases", response_model=schemas.Purchase)
+def create_purchase(
+    purchase_in: schemas.PurchaseCreate,
     current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    return crud.get_receipts(db=db, branch_id=target_branch_id, order_id=order_id, purchase_id=purchase_id, skip=skip, limit=limit)
+    branch_id = purchase_in.branch_id or target_branch_id or current_user.branch_id or 1
 
-@router.post("/receipts", response_model=schemas.Receipt)
-def create_receipt(
-    receipt: schemas.ReceiptCreate,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
+    subtotal = sum(d.unit_cost * d.quantity for d in purchase_in.details)
+    tax = subtotal * 0.16
+    total = subtotal + tax
+
+    db_purchase = models.Purchase(
+        provider_name=purchase_in.provider_name,
+        provider_id=purchase_in.provider_id,
+        branch_id=branch_id,
+        subtotal=subtotal,
+        tax=tax,
+        total=total,
+        status=purchase_in.status,
+        date=datetime.utcnow()
+    )
+    uow.db.add(db_purchase)
+    uow.db.flush()
+
+    for d in purchase_in.details:
+        effective_product_id = d.product_id
+        effective_consumable_id = d.consumable_id
+
+        if d.item_type == "product":
+            if not effective_product_id and d.description:
+                # Check if a product with this name already exists in the branch
+                existing = uow.db.query(models.Product).filter(
+                    models.Product.name == d.description,
+                    models.Product.branch_id == branch_id
+                ).first()
+
+                if existing:
+                    effective_product_id = existing.id
+                else:
+                    if not d.sales_price or d.sales_price <= 0:
+                        raise HTTPException(
+                            status_code=400, 
+                            detail=f"El precio de venta es obligatorio para el nuevo producto: {d.description}"
+                        )
+                    # Create new product in the branch inventory
+                    new_product = models.Product(
+                        name=d.description,
+                        description=f"Creado automáticamente desde compra a {purchase_in.provider_name}",
+                        price=d.sales_price,
+                        stock=0,
+                        type="physical",
+                        is_active=True,
+                        branch_id=branch_id
+                    )
+                    uow.db.add(new_product)
+                    uow.db.flush()
+                    effective_product_id = new_product.id
+            
+            if effective_product_id:
+                uow.products.update_stock(effective_product_id, d.quantity)
+
+        elif d.item_type == "consumable":
+            if not effective_consumable_id and d.description:
+                # Check if a consumable with this name already exists
+                existing = uow.db.query(models.Consumable).filter(
+                    models.Consumable.name == d.description,
+                    models.Consumable.branch_id == branch_id
+                ).first()
+
+                if existing:
+                    effective_consumable_id = existing.id
+                else:
+                    # Create new consumable
+                    new_consumable = models.Consumable(
+                        name=d.description,
+                        description=f"Creado automáticamente desde compra a {purchase_in.provider_name}",
+                        unit=d.unit or "unidad",
+                        stock=0,
+                        cost=d.unit_cost,
+                        branch_id=branch_id,
+                        is_active=True
+                    )
+                    uow.db.add(new_consumable)
+                    uow.db.flush()
+                    effective_consumable_id = new_consumable.id
+            
+            if effective_consumable_id:
+                # Note: consumable repo update_stock uses -=, so we pass negative to ADD stock
+                uow.consumables.update_stock(effective_consumable_id, -d.quantity)
+
+        db_detail = models.PurchaseDetail(
+            purchase_id=db_purchase.id,
+            product_id=effective_product_id,
+            consumable_id=effective_consumable_id,
+            item_type=d.item_type,
+            description=d.description,
+            quantity=d.quantity,
+            unit=d.unit,
+            unit_cost=d.unit_cost,
+            sales_price=d.sales_price or 0.0,
+            subtotal=d.unit_cost * d.quantity
+        )
+        uow.db.add(db_detail)
+
+    # --- AUTO-CREATE PAYABLE ---
+    payable_data = {
+        "branch_id": branch_id,
+        "provider_id": purchase_in.provider_id,
+        "amount": total,
+        "subtotal": subtotal,
+        "tax": tax,
+        "exchange_rate": 1.0, # Default for purchases if not specified
+        "exchange_currency": "usd", # Or whatever default
+        "description": f"Compra a {purchase_in.provider_name}",
+        "reference": purchase_in.provider_name,
+        "due_date": datetime.utcnow(),
+        "status": "pending",
+        "category": purchase_in.category or "Compras",
+        "purchase_id": db_purchase.id
+    }
+    uow.payables.create(payable_data)
+
+    uow.commit()
+    uow.refresh(db_purchase)
+    return db_purchase
+
+# --- DASHBOARD & SUMMARIES & STATEMENTS ---
+
+@router.get("/clients/{client_id}/statement", response_model=schemas.ClientStatement)
+def get_client_statement_api(
+    client_id: int,
+    month: Optional[int] = Query(None),
+    year: Optional[int] = Query(None),
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    # Only income or expense allowed
-    if receipt.type not in ["income", "expense"]:
-        raise HTTPException(status_code=400, detail="Invalid receipt type")
-    
-    return crud.create_receipt(db=db, receipt=receipt)
+    use_case = GetFinancialDataUseCase(uow)
+    statement = use_case.get_client_statement(client_id, branch_id=target_branch_id, month=month, year=year)
+    if not statement:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return statement
 
+@router.get("/financial-summary", response_model=schemas.FinancialSummary)
+def get_financial_summary(
+    month: Optional[int] = Query(None),
+    year: Optional[int] = Query(None),
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
+):
+    use_case = DashboardUseCases(uow)
+    return use_case.get_financial_summary(target_branch_id, month=month, year=year)
 
-# --- RECEIVABLES ---
+@router.get("/dashboard-stats", response_model=schemas.DashboardStats)
+def get_dashboard_stats(
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
+):
+    use_case = DashboardUseCases(uow)
+    return use_case.get_dashboard_stats(target_branch_id)
 
 @router.get("/receivables", response_model=List[schemas.ReceivableSummary])
-def read_receivables_summary(
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+def get_receivables(
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    return crud.get_receivables_summary(db=db, branch_id=target_branch_id)
+    use_case = GetFinancialDataUseCase(uow)
+    return use_case.get_receivables(target_branch_id)
 
+@router.get("/cash-movements", response_model=List[schemas.CashMovement])
+def get_cash_movements(
+    skip: int = 0,
+    limit: int = 100,
+    month: Optional[int] = Query(None),
+    year: Optional[int] = Query(None),
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
+):
+    return uow.cash_movements.get_by_branch(target_branch_id, skip=skip, limit=limit, month=month, year=year)
 
 # --- CASH CATEGORIES ---
 
 @router.get("/cash-categories", response_model=List[schemas.CashCategory])
 def read_cash_categories(
-    db: Session = Depends(deps.get_db),
-    skip: int = 0,
-    limit: int = 100,
-    current_user: models.User = Depends(deps.get_current_user),
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    # Categories are now global, ignore branch_id
-    return crud.get_cash_categories(db=db, branch_id=0, skip=skip, limit=limit)
+    return uow.cash_categories.get_all(branch_id=target_branch_id)
 
 @router.post("/cash-categories", response_model=schemas.CashCategory)
 def create_cash_category(
-    category: schemas.CashCategoryCreate,
-    db: Session = Depends(deps.get_db),
+    category_in: schemas.CashCategoryCreate,
     current_user: models.User = Depends(deps.get_current_user),
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    # RBAC: Only Gerente or SuperAdmin
-    is_authorized = current_user.is_superuser or (current_user.role and current_user.role.name == "Gerente")
-    if not is_authorized:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tiene permisos para gestionar catálogos")
-
-    # Categories are now global
-    category.branch_id = None
-    return crud.create_cash_category(db=db, category=category)
-
-@router.put("/cash-categories/{category_id}", response_model=schemas.CashCategory)
-def update_cash_category(
-    category_id: int,
-    category: schemas.CashCategoryUpdate,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
-):
-    # RBAC: Only Gerente or SuperAdmin
-    is_authorized = current_user.is_superuser or (current_user.role and current_user.role.name == "Gerente")
-    if not is_authorized:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tiene permisos para gestionar catálogos")
-
-    db_cat = crud.update_cash_category(db=db, category_id=category_id, params=category)
-    if not db_cat:
-        raise HTTPException(status_code=404, detail="Category not found")
+    if not category_in.branch_id:
+        category_in.branch_id = target_branch_id or current_user.branch_id
+    
+    db_cat = uow.cash_categories.create(category_in.model_dump())
+    uow.commit()
+    uow.refresh(db_cat)
     return db_cat
 
-@router.delete("/cash-categories/{category_id}")
-def delete_cash_category(
-    category_id: int,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
+@router.put("/cash-categories/{id}", response_model=schemas.CashCategory)
+def update_cash_category(
+    id: int,
+    category_in: schemas.CashCategoryUpdate,
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    # RBAC: Only Gerente or SuperAdmin
-    is_authorized = current_user.is_superuser or (current_user.role and current_user.role.name == "Gerente")
-    if not is_authorized:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tiene permisos para gestionar catálogos")
-
-    if not crud.delete_cash_category(db=db, category_id=category_id):
+    db_cat = uow.cash_categories.get(id)
+    if not db_cat:
         raise HTTPException(status_code=404, detail="Category not found")
+    
+    uow.cash_categories.update(db_cat, category_in.model_dump(exclude_unset=True))
+    uow.commit()
+    uow.refresh(db_cat)
+    return db_cat
+
+@router.delete("/cash-categories/{id}")
+def delete_cash_category(
+    id: int,
+    uow: UnitOfWork = Depends(get_uow),
+):
+    if not uow.cash_categories.remove(id):
+        raise HTTPException(status_code=404, detail="Category not found")
+    uow.commit()
     return {"ok": True}
 
 # --- PAYMENT METHODS ---
 
 @router.get("/payment-methods", response_model=List[schemas.PaymentMethod])
 def read_payment_methods(
-    db: Session = Depends(deps.get_db),
-    skip: int = 0,
-    limit: int = 100,
-    current_user: models.User = Depends(deps.get_current_user),
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    # Payment methods are now global
-    return crud.get_payment_methods(db=db, branch_id=0, skip=skip, limit=limit)
+    return uow.payment_methods.get_active(branch_id=target_branch_id)
 
 @router.post("/payment-methods", response_model=schemas.PaymentMethod)
 def create_payment_method(
-    method: schemas.PaymentMethodCreate,
-    db: Session = Depends(deps.get_db),
+    method_in: schemas.PaymentMethodCreate,
     current_user: models.User = Depends(deps.get_current_user),
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    # RBAC: Only Gerente or SuperAdmin
-    is_authorized = current_user.is_superuser or (current_user.role and current_user.role.name == "Gerente")
-    if not is_authorized:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tiene permisos para gestionar catálogos")
-        
-    # Payment methods are now global
-    method.branch_id = None
-    return crud.create_payment_method(db=db, method=method)
-
-@router.put("/payment-methods/{method_id}", response_model=schemas.PaymentMethod)
-def update_payment_method(
-    method_id: int,
-    method: schemas.PaymentMethodUpdate,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
-):
-    # RBAC: Only Gerente or SuperAdmin
-    is_authorized = current_user.is_superuser or (current_user.role and current_user.role.name == "Gerente")
-    if not is_authorized:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tiene permisos para gestionar catálogos")
-
-    db_method = crud.update_payment_method(db=db, method_id=method_id, params=method)
-    if not db_method:
-        raise HTTPException(status_code=404, detail="Payment Method not found")
+    if not method_in.branch_id:
+        method_in.branch_id = target_branch_id or current_user.branch_id
+    
+    db_method = uow.payment_methods.create(method_in.model_dump())
+    uow.commit()
+    uow.refresh(db_method)
     return db_method
 
-@router.delete("/payment-methods/{method_id}")
+@router.put("/payment-methods/{id}", response_model=schemas.PaymentMethod)
+def update_payment_method(
+    id: int,
+    method_in: schemas.PaymentMethodUpdate,
+    uow: UnitOfWork = Depends(get_uow),
+):
+    db_method = uow.payment_methods.get(id)
+    if not db_method:
+        raise HTTPException(status_code=404, detail="Payment method not found")
+    
+    uow.payment_methods.update(db_method, method_in.model_dump(exclude_unset=True))
+    uow.commit()
+    uow.refresh(db_method)
+    return db_method
+
+@router.delete("/payment-methods/{id}")
 def delete_payment_method(
-    method_id: int,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
+    id: int,
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    # RBAC: Only Gerente or SuperAdmin
-    is_authorized = current_user.is_superuser or (current_user.role and current_user.role.name == "Gerente")
-    if not is_authorized:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tiene permisos para gestionar catálogos")
-
-    if not crud.delete_payment_method(db=db, method_id=method_id):
-        raise HTTPException(status_code=404, detail="Payment Method not found")
+    if not uow.payment_methods.remove(id):
+        raise HTTPException(status_code=404, detail="Payment method not found")
+    uow.commit()
     return {"ok": True}
-
-# --- CASH MOVEMENTS ---
-
-@router.get("/cash-movements", response_model=List[schemas.CashMovement])
-def read_cash_movements(
-    db: Session = Depends(deps.get_db),
-    skip: int = 0,
-    limit: int = 100,
-    current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id),
-    month: Optional[int] = None,
-    year: Optional[int] = None
-):
-    return crud.get_cash_movements(db=db, branch_id=target_branch_id, skip=skip, limit=limit, month=month, year=year)
-
-
-@router.post("/cash-movements", response_model=schemas.CashMovement)
-def create_cash_movement(
-    movement: schemas.CashMovementCreate,
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
-):
-    if not movement.branch_id:
-        movement.branch_id = target_branch_id or current_user.branch_id or 1
-    return crud.create_cash_movement(db=db, movement=movement)
-
-
-@router.get("/financial-summary")
-def get_financial_summary(
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id),
-    month: Optional[int] = None,
-    year: Optional[int] = None
-):
-    """
-    Returns a high-level summary of financial status for the branch.
-    """
-    branch_id = target_branch_id
-    
-    # Receivables (Total balance from summary)
-    receivables = crud.get_receivables_summary(db=db, branch_id=branch_id)
-    total_receivables = sum(r["balance"] for r in receivables)
-    
-    # Payables (PENDING payables for this branch)
-    q_payables = db.query(func.sum(models.Payable.amount))
-    if branch_id > 0:
-        q_payables = q_payables.filter(models.Payable.branch_id == branch_id)
-    total_payables = q_payables.filter(models.Payable.status == "pending").scalar() or 0.0
-        
-    # Cash movements balance
-    q_income = db.query(func.sum(models.CashMovement.amount))
-    q_expense = db.query(func.sum(models.CashMovement.amount))
-    
-    if branch_id > 0:
-        q_income = q_income.filter(models.CashMovement.branch_id == branch_id)
-        q_expense = q_expense.filter(models.CashMovement.branch_id == branch_id)
-        
-    if month:
-        q_income = q_income.filter(func.extract('month', models.CashMovement.date) == month)
-        q_expense = q_expense.filter(func.extract('month', models.CashMovement.date) == month)
-    if year:
-        q_income = q_income.filter(func.extract('year', models.CashMovement.date) == year)
-        q_expense = q_expense.filter(func.extract('year', models.CashMovement.date) == year)
-        
-    income = q_income.filter(models.CashMovement.type == "income").scalar() or 0.0
-    expense = q_expense.filter(models.CashMovement.type == "expense").scalar() or 0.0
-        
-    # Standard Income receipts (Sales)
-    q_sales_income = db.query(func.sum(models.Receipt.amount)).join(models.Orden, models.Receipt.orden_id == models.Orden.id)
-    if branch_id > 0:
-        q_sales_income = q_sales_income.filter(models.Orden.branch_id == branch_id)
-    sales_income = q_sales_income.filter(models.Receipt.type == "income").scalar() or 0.0
-        
-    # Standard Expense receipts (Purchases)
-    q_purchase_expense = db.query(func.sum(models.Receipt.amount)).join(models.Purchase, models.Receipt.purchase_id == models.Purchase.id)
-    if branch_id > 0:
-        q_purchase_expense = q_purchase_expense.filter(models.Purchase.branch_id == branch_id)
-    purchase_expense = q_purchase_expense.filter(models.Receipt.type == "expense").scalar() or 0.0
-
-    current_cash = (income + sales_income) - (expense + purchase_expense)
-    
-    return {
-        "total_receivables": total_receivables,
-        "total_payables": total_payables,
-        "current_cash": current_cash,
-        "branch_id": branch_id
-    }
-
-
-@router.get("/dashboard-stats", response_model=schemas.DashboardStats)
-def get_dashboard_stats(
-    db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
-):
-    """
-    Returns consolidated statistics for the dashboard.
-    """
-    return crud.get_dashboard_stats(db=db, branch_id=target_branch_id)
-

@@ -18,10 +18,11 @@ interface ProvidersState {
     createProvider: (data: CreateProviderDTO) => Promise<void>;
     updateProvider: (id: number, data: UpdateProviderDTO) => Promise<void>;
     deleteProvider: (id: number) => Promise<void>;
-    fetchPayables: (providerId?: number) => Promise<void>;
+    fetchPayables: (providerId?: number, month?: number, year?: number, branchId?: number) => Promise<void>;
     createPayable: (data: CreatePayableDTO) => Promise<void>;
     updatePayable: (id: number, data: UpdatePayableDTO) => Promise<void>;
     deletePayable: (id: number) => Promise<void>;
+    fetchProviderStatement: (providerId: number, params?: { month?: number; year?: number; status?: string; branch_id?: number }) => Promise<any>;
 }
 
 export const useProvidersStore = create<ProvidersState>((set) => ({
@@ -82,10 +83,10 @@ export const useProvidersStore = create<ProvidersState>((set) => ({
         }
     },
 
-    fetchPayables: async (providerId) => {
+    fetchPayables: async (providerId?: number, month?: number, year?: number, branchId?: number) => {
         set({ isLoading: true, error: null });
         try {
-            const payables = await providersService.getPayables(providerId);
+            const payables = await providersService.getPayables(providerId, month, year, branchId);
             set({ payables, isLoading: false });
         } catch (error: any) {
             set({ error: error.message || 'Error al cargar cuentas por pagar', isLoading: false });
@@ -130,6 +131,18 @@ export const useProvidersStore = create<ProvidersState>((set) => ({
             }));
         } catch (error: any) {
             set({ error: error.message || 'Error al eliminar cuenta por pagar', isLoading: false });
+            throw error;
+        }
+    },
+
+    fetchProviderStatement: async (providerId, params) => {
+        set({ isLoading: true, error: null });
+        try {
+            const statement = await providersService.getProviderStatement(providerId, params);
+            set({ isLoading: false });
+            return statement;
+        } catch (error: any) {
+            set({ error: error.message || 'Error al cargar el estado de cuenta', isLoading: false });
             throw error;
         }
     },

@@ -1,33 +1,77 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../features/auth/hooks/useAuthStore';
 import { useConfigurationStore } from '../../features/configuration/hooks/useConfigurationStore';
 import {
     LayoutDashboard, Users, LayoutGrid, DoorOpen, CalendarDays,
     TrendingUp, LogOut, Landmark, ShoppingBag, Wallet, Receipt,
-    Users2, FileText, Shield, Building2, Package, Sparkles, SprayCan, BookOpen, Bell, Activity, Lock, BarChart, Settings, FileBarChart2
+    Users2, FileText, Shield, Building2, Package, Sparkles, SprayCan, BookOpen, Bell, Activity, Lock, BarChart, Settings, FileBarChart2, Globe, BarChart2, List
 } from 'lucide-react';
 import { useSystemStore } from '../../features/system/hooks/useSystemStore';
-
+import { X, Info, Menu } from 'lucide-react';
+import logo from '../../assets/nest-logo.png';
+import { useSessionManager } from '../../features/auth/hooks/useSessionManager';
 // Helper: get initials from email
 const getInitials = (email: string) => email.substring(0, 2).toUpperCase();
 
 
 export const MainLayout: React.FC = () => {
+    useSessionManager();
     const { user, logout, selectedBranchId, setSelectedBranchId } = useAuthStore();
     const { branches, fetchBranches } = useConfigurationStore();
     const navigate = useNavigate();
+    const location = useLocation();
 
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
     const { notifications, fetchNotifications, markAsRead } = useSystemStore();
+
+    // Cerrar menú móvil al navegar
+    useEffect(() => {
+        setIsMobileMenuOpen(false);
+    }, [location.pathname]);
 
     useEffect(() => {
         if (branches.length === 0) fetchBranches();
     }, [fetchBranches, branches.length]);
 
+    const [lastSeenNotifId, setLastSeenNotifId] = useState<number>(0);
+    const [activeToasts, setActiveToasts] = useState<any[]>([]);
+
     useEffect(() => {
-        if (user) fetchNotifications();
+        if (user) {
+            fetchNotifications();
+            // Polling cada 60 segundos
+            const interval = setInterval(fetchNotifications, 60000);
+            return () => clearInterval(interval);
+        }
     }, [user, fetchNotifications]);
+
+    // Detectar nuevas notificaciones para mostrar Toasts
+    useEffect(() => {
+        if (notifications.length > 0) {
+            const unread = notifications.filter(n => !n.is_read);
+            const newNotifs = unread.filter(n => n.id > lastSeenNotifId);
+
+            if (newNotifs.length > 0) {
+                // Solo mostrar Toasts para notificaciones de tipo "Recordatorio" o similares
+                // En este caso, mostraremos todas las nuevas "unread" que lleguen por polling
+                setActiveToasts(prev => [...prev, ...newNotifs]);
+                const maxId = Math.max(...newNotifs.map(n => n.id));
+                setLastSeenNotifId(maxId);
+            } else if (unread.length > 0 && lastSeenNotifId === 0) {
+                // Inicializar el ID más alto al cargar por primera vez para no mostrar 
+                // Toasts de notificaciones viejas al entrar
+                const maxId = Math.max(...unread.map(n => n.id));
+                setLastSeenNotifId(maxId);
+            }
+        }
+    }, [notifications, lastSeenNotifId]);
+
+    const dismissToast = (id: number) => {
+        setActiveToasts(prev => prev.filter(t => t.id !== id));
+        markAsRead(id);
+    };
 
     // Set initial branch based on user profile if not selected yet
     React.useEffect(() => {
@@ -76,6 +120,8 @@ export const MainLayout: React.FC = () => {
             module: 'management',
             items: [
                 { to: '/gerencia', icon: BarChart, label: 'Inteligencia de Negocios' },
+                { to: '/management-dashboard', icon: LayoutDashboard, label: 'Dashboard Gerencial' },
+                { to: '/reportes-gerencia', icon: BarChart2, label: 'Reporte Ejecutivo' },
             ],
         },
         {
@@ -103,6 +149,7 @@ export const MainLayout: React.FC = () => {
                 { to: '/rooms', icon: DoorOpen, label: 'Salas' },
                 { to: '/bookings', icon: CalendarDays, label: 'Reservas' },
                 { to: '/memberships', icon: BookOpen, label: 'Membresías' },
+                { to: '/amenity-templates', icon: List, label: 'Plantillas de Amenidades' },
             ],
         },
         {
@@ -130,103 +177,168 @@ export const MainLayout: React.FC = () => {
                 { to: '/users', icon: Shield, label: 'Usuarios y Accesos' },
                 { to: '/roles', icon: Lock, label: 'Gestionar Roles' },
                 { to: '/branches', icon: Building2, label: 'Sedes y Sucursales' },
+                { to: '/client-portal', icon: Globe, label: 'Portal Coworker' },
                 { to: '/catalogos', icon: Settings, label: 'Catálogos' },
             ],
         },
     ];
 
-    // Operator role has limited financial access (only orders & billing)
+    // Merge direct user permissions with Role permissions
     const filteredNavGroups = useMemo(() => {
         return navGroups.map(group => {
             if (group.module === null) return group; // General always shown
             if (!user) return { ...group, items: [] };
             if (user.is_superuser) return group;
 
-            const perms = user.access_permissions ?? {};
-            
+            // Merge: Role permissions + User overrides
+            const perms = {
+                ...(user.role?.permissions_json || {}),
+                ...(user.access_permissions || {})
+            };
+
             // Special handling for management module
             if (group.module === 'management') {
                 const isManager = roleName === 'Gerente' || roleName === 'Super Admin' || user.is_superuser;
                 return isManager ? group : { ...group, items: [] };
             }
 
-            // Reports module is visible to all authenticated users (content filtered inside page)
-            if (group.module === 'reports') {
-                return group;
-            }
+            // Reports module is visible to all authenticated users
+            if (group.module === 'reports') return group;
 
-            const hasAccess = !!perms[group.module];
+            // Check if user has main access to the group module
+            const hasMainAccess = !!perms[group.module];
 
-            if (!hasAccess) return { ...group, items: [] };
+            // If no main access, we might still have granular sub-module access
+            // (especially relevant for 'financial' which has many sub-toggles)
+            const visibleItems = group.items.filter(item => {
+                const slug = item.to.replace('/', '');
+                const permKey = `${group.module}_${slug === '' ? 'dashboard' : slug}`;
 
-            // Granular filtering for financial module
-            if (group.module === 'financial' && !perms['financial']) {
-                // If main financial toggle is off, but module has access, check sub-permissions
+                const mapping: Record<string, string> = {
+                    // Financial
+                    'caja': 'financial_cashflow',
+                    'proveedores': 'financial_vendors',
+                    'cuentas-por-cobrar': 'financial_receivables',
+                    'cuentas-por-pagar': 'financial_payables',
+                    'purchases': 'financial_purchases',
+                    'orders': 'financial_orders',
+                    'billing': 'financial_billing',
+                    'dashboard': 'financial_dashboard',
+                    // Operative
+                    'clients': 'operative_clients',
+                    'espacios': 'operative_espacios',
+                    'rooms': 'operative_rooms',
+                    'bookings': 'operative_bookings',
+                    'memberships': 'operative_memberships'
+                };
+
+                const finalKey = mapping[slug] || permKey;
+
+                // Si el permiso granular existe explícitamente (true o false), se respeta la granularidad
+                if (perms[finalKey] !== undefined) {
+                    return !!perms[finalKey];
+                }
+
+                // De lo contrario, heredar el permiso de la categoría padre (ej. 'crm', 'configuration')
+                let allowed = hasMainAccess;
+
+                // Explicit restriction for amenity-templates
+                if (item.to === '/amenity-templates') {
+                    const isAllowed = user.is_superuser || roleName === 'Gerente' || roleName === 'Coordinador' || roleName === 'Super Admin';
+                    if (!isAllowed) allowed = false;
+                }
+
+                return allowed;
+            });
+
+            // Special fallback for legacy Operator role
+            if (group.module === 'financial' && roleName === 'Operador' && visibleItems.length === 0) {
                 return {
                     ...group,
-                    items: group.items.filter(item => {
-                        // Extract slug from URL (e.g. /products -> products)
-                        const slug = item.to.replace('/', '');
-                        // Map special cases or use exact slug
-                        const permKey = `financial_${slug === '' ? 'dashboard' : slug}`;
-                        return !!perms[permKey];
-                    }),
+                    items: group.items.filter(i => i.to === '/orders' || i.to === '/billing'),
                 };
             }
 
-            // Legacy Operator: limited financial access (if no granular perms set)
-            if (group.module === 'financial' && roleName === 'Operador' && perms['financial']) {
-                // If main is ON, we usually show everything, but keep legacy operator restriction 
-                // as a fallback or if no sub-perms are defined.
-                // Actually, if main is ON, it's better to show all unless we want to keep it.
-                // Let's prioritize granular perms if any are present.
-                const hasAnySubPerms = Object.keys(perms).some(k => k.startsWith('financial_') && perms[k]);
-                if (!hasAnySubPerms) {
-                    return {
-                        ...group,
-                        items: group.items.filter(i => i.to === '/orders' || i.to === '/billing'),
-                    };
-                }
-            }
-
-            return group;
+            return { ...group, items: visibleItems };
         }).filter(g => g.items.length > 0);
     }, [user, roleName]);
 
     return (
-        <div className="flex h-screen bg-gray-100 font-sans">
+        <div className="flex h-screen bg-gray-100 font-sans overflow-hidden">
+            {/* Backdrop para móviles */}
+            {isMobileMenuOpen && (
+                <div 
+                    className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-40 md:hidden transition-opacity duration-300"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                />
+            )}
+
             {/* Sidebar */}
-            <aside className="w-64 bg-slate-900 text-white flex flex-col shadow-xl z-20 shrink-0 hidden md:flex">
+            <aside className={`
+                bg-slate-900 text-white flex flex-col shadow-xl z-50 shrink-0
+                fixed inset-y-0 left-0 w-72 transform md:translate-x-0 md:static md:w-64 md:flex
+                transition-transform duration-300 ease-in-out
+                ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+            `}>
 
                 {/* Logo + Branch Color Accent */}
-                <div className="h-16 flex items-center px-5 border-b border-slate-700 shrink-0" style={{ borderLeftColor: themeColor, borderLeftWidth: 4 }}>
-                    <div className="w-10 h-10 flex items-center justify-center mr-2 shrink-0 overflow-hidden relative">
-                        <img 
-                            src="/src/assets/nest-logo.png" 
-                            alt="Logo" 
-                            className="w-full h-full object-contain z-10 relative" 
-                            onLoad={(e) => {
-                                const fallback = e.currentTarget.parentElement?.querySelector('.logo-fallback') as HTMLElement;
-                                if (fallback) fallback.style.display = 'none';
-                            }}
-                            onError={(e) => {
-                                e.currentTarget.style.display = 'none';
-                                const fallback = e.currentTarget.parentElement?.querySelector('.logo-fallback') as HTMLElement;
-                                if (fallback) fallback.style.display = 'flex';
-                            }} 
-                        />
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white shadow-lg text-sm logo-fallback absolute inset-0 m-auto"
-                            style={{ backgroundColor: themeColor }}>
-                            N
+                <div className="h-16 flex items-center justify-between px-5 border-b border-slate-700 shrink-0" style={{ borderLeftColor: themeColor, borderLeftWidth: 4 }}>
+                    <div className="flex items-center min-w-0">
+                        <div className="w-10 h-10 flex items-center justify-center mr-2 shrink-0 overflow-hidden relative">
+                            <img
+                                src={logo}
+                                alt="Logo"
+                                className="w-full h-full object-contain z-10 relative"
+                                onLoad={(e) => {
+                                    const fallback = e.currentTarget.parentElement?.querySelector('.logo-fallback') as HTMLElement;
+                                    if (fallback) fallback.style.display = 'none';
+                                }}
+                                onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    const fallback = e.currentTarget.parentElement?.querySelector('.logo-fallback') as HTMLElement;
+                                    if (fallback) fallback.style.display = 'flex';
+                                }}
+                            />
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white shadow-lg text-sm logo-fallback absolute inset-0 m-auto"
+                                style={{ backgroundColor: themeColor }}>
+                                N
+                            </div>
+                        </div>
+                        <div className="truncate">
+                            <span className="text-sm font-bold tracking-wide text-white">Nest Coworking</span>
+                            {branchName && (
+                                <p className="text-[10px] font-bold truncate" style={{ color: themeColor }}>{branchName}</p>
+                            )}
                         </div>
                     </div>
-                    <div className="truncate">
-                        <span className="text-sm font-bold tracking-wide text-white">Nest Coworking</span>
-                        {branchName && (
-                            <p className="text-[10px] font-bold truncate" style={{ color: themeColor }}>{branchName}</p>
-                        )}
-                    </div>
+                    {/* Botón de cerrar en móvil */}
+                    <button
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="md:hidden text-slate-400 hover:text-white p-1 rounded-lg transition-colors"
+                        title="Cerrar menú"
+                    >
+                        <X size={20} />
+                    </button>
                 </div>
+
+                {/* Branch selector inside mobile menu */}
+                {canSelectBranch && (
+                    <div className="px-4 py-2.5 bg-slate-800/50 border-b border-slate-700/50 md:hidden shrink-0">
+                        <div className="flex items-center gap-1.5 border border-slate-700 rounded px-2.5 py-1.5 bg-slate-850">
+                            <Building2 size={13} className="text-slate-400" />
+                            <select
+                                className="bg-transparent text-xs font-bold text-slate-200 outline-none cursor-pointer w-full"
+                                value={selectedBranchId ?? 0}
+                                onChange={(e) => setSelectedBranchId(Number(e.target.value))}
+                            >
+                                <option value={0} className="bg-slate-900 text-white">Todas las sedes</option>
+                                {branches.map(b => (
+                                    <option key={b.id} value={b.id} className="bg-slate-900 text-white">{b.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                )}
 
                 {/* Branch + User Header */}
                 {branchName && (
@@ -276,7 +388,7 @@ export const MainLayout: React.FC = () => {
                                 style={{ backgroundColor: themeColor }}>
                                 {user?.email ? getInitials(user.email) : 'U'}
                             </div>
-                            <div className="ml-2 truncate hidden lg:block">
+                            <div className="ml-2 truncate min-w-0">
                                 <p className="text-sm font-bold text-white truncate">{roleName}</p>
                                 <p className="text-[11px] text-slate-400 truncate">{user?.email ?? 'user@nestcoworking.com'}</p>
                             </div>
@@ -338,18 +450,22 @@ export const MainLayout: React.FC = () => {
             </aside>
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col min-w-0 bg-white">
+            <div className="flex-1 flex flex-col min-w-0 bg-base relative pb-16 md:pb-0">
                 {/* Top bar: Sede - Usuario visible on mobile/tablet */}
-                <header className="h-12 bg-white border-b px-4 flex items-center justify-between md:hidden shrink-0">
-                    <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 flex items-center justify-center overflow-hidden">
-                            <img src="/src/assets/nest-logo.png" alt="N" className="w-full h-full object-contain" />
+                <header className="h-14 bg-white border-b px-4 flex items-center justify-between md:hidden shrink-0">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-6 h-6 flex items-center justify-center overflow-hidden shrink-0">
+                                <img src={logo} alt="N" className="w-full h-full object-contain" />
+                            </div>
+                            <span className="font-bold text-sm text-gray-800 truncate">
+                                {activeBranch ? activeBranch.name : 'Nest Coworking'}
+                            </span>
                         </div>
-                        {branchName && <span className="font-bold text-sm text-gray-700">{branchName}</span>}
-                        <span className="text-gray-300">·</span>
-                        <span className="font-medium text-sm text-gray-600">{user?.email}</span>
                     </div>
-                    <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 p-1"><LogOut size={16} /></button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                        <button onClick={handleLogout} className="text-gray-500 hover:text-red-500 p-2 rounded-lg transition-colors"><LogOut size={18} /></button>
+                    </div>
                 </header>
 
                 {/* Page header with Sede info for all users */}
@@ -384,7 +500,55 @@ export const MainLayout: React.FC = () => {
                     </div>
                 </div>
 
-                <Outlet />
+                <div className="flex-1 overflow-y-auto">
+                    <Outlet />
+                </div>
+
+                {/* Toast Container */}
+                <div className="fixed bottom-6 right-6 z-[110] flex flex-col gap-3 pointer-events-none">
+                    {activeToasts.map((toast) => (
+                        <div
+                            key={toast.id}
+                            className="bg-white border-l-4 border-blue-600 shadow-2xl rounded-lg p-4 flex items-start gap-3 w-80 pointer-events-auto animate-in slide-in-from-right-10 duration-500"
+                        >
+                            <div className="bg-blue-100 p-2 rounded-full text-blue-600 shrink-0">
+                                <Info size={20} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h4 className="text-sm font-bold text-gray-900 truncate">{toast.title}</h4>
+                                <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                                    {toast.message}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => dismissToast(toast.id)}
+                                className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Bottom Navigation para móviles */}
+                <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around items-center h-16 z-40 pb-safe">
+                    <NavLink to="/" end className={({ isActive }) => `flex flex-col items-center justify-center w-full h-full space-y-1 ${isActive ? 'text-brand-accent' : 'text-gray-500 hover:text-gray-900'}`}>
+                        <LayoutDashboard size={20} />
+                        <span className="text-[10px] font-medium">Inicio</span>
+                    </NavLink>
+                    <NavLink to="/orders" className={({ isActive }) => `flex flex-col items-center justify-center w-full h-full space-y-1 ${isActive ? 'text-brand-accent' : 'text-gray-500 hover:text-gray-900'}`}>
+                        <Landmark size={20} />
+                        <span className="text-[10px] font-medium">POS</span>
+                    </NavLink>
+                    <NavLink to="/bookings" className={({ isActive }) => `flex flex-col items-center justify-center w-full h-full space-y-1 ${isActive ? 'text-brand-accent' : 'text-gray-500 hover:text-gray-900'}`}>
+                        <CalendarDays size={20} />
+                        <span className="text-[10px] font-medium">Reservas</span>
+                    </NavLink>
+                    <button onClick={() => setIsMobileMenuOpen(true)} className="flex flex-col items-center justify-center w-full h-full space-y-1 text-gray-500 hover:text-gray-900">
+                        <Menu size={20} />
+                        <span className="text-[10px] font-medium">Menú</span>
+                    </button>
+                </nav>
             </div>
         </div>
     );

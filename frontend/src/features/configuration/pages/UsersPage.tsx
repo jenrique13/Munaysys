@@ -43,6 +43,12 @@ const CreateUserModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 configuration: !!preset.configuration,
             });
         }
+        
+        // Roles privileged default to All Branches (0)
+        const privileged = ['Gerente', 'Ventas', 'Coordinador', 'Super Administrador'];
+        if (privileged.includes(roleName)) {
+            setSelectedBranch(0);
+        }
     };
 
     const handleToggle = (mod: string) => {
@@ -60,7 +66,7 @@ const CreateUserModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             if (newUser) {
                 await updateUser(newUser.id, {
                     role_id: roleObj?.id,
-                    branch_id: selectedBranch !== '' ? selectedBranch : undefined,
+                    branch_id: selectedBranch !== '' && selectedBranch !== 0 ? selectedBranch : null as any,
                     access_permissions: permissions,
                 });
             }
@@ -112,6 +118,7 @@ const CreateUserModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                                 <select value={selectedBranch} onChange={e => setSelectedBranch(e.target.value !== '' ? Number(e.target.value) : '')}
                                     className="w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 appearance-none pr-8 bg-white">
                                     <option value="">-- Sin Sede --</option>
+                                    <option value="0">Todas las sedes (Master)</option>
                                     {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                                 </select>
                                 <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -176,6 +183,12 @@ const EditUserModal: React.FC<{ user: User; onClose: () => void }> = ({ user, on
                     configuration: !!preset.configuration,
                 });
             }
+
+            // Roles privileged default to All Branches (0)
+            const privileged = ['Gerente', 'Ventas', 'Coordinador', 'Super Administrador'];
+            if (privileged.includes(role.name)) {
+                setSelectedBranch(0);
+            }
         }
     };
 
@@ -189,7 +202,7 @@ const EditUserModal: React.FC<{ user: User; onClose: () => void }> = ({ user, on
             is_active: isActive,
             access_permissions: permissions,
             role_id: selectedRole !== '' ? selectedRole : undefined,
-            branch_id: selectedBranch !== '' ? selectedBranch : undefined,
+            branch_id: selectedBranch !== '' && selectedBranch !== 0 ? selectedBranch : null as any,
         };
         if (password.trim()) { data.password = password.trim(); }
         const ok = await updateUser(user.id, data);
@@ -244,6 +257,7 @@ const EditUserModal: React.FC<{ user: User; onClose: () => void }> = ({ user, on
                                 <select value={selectedBranch} onChange={e => setSelectedBranch(e.target.value !== '' ? Number(e.target.value) : '')}
                                     className="w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 appearance-none pr-8 bg-white">
                                     <option value="">-- Sin Sede --</option>
+                                    <option value="0">Todas las sedes (Master)</option>
                                     {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                                 </select>
                                 <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -327,7 +341,12 @@ const UsersPage: React.FC = () => {
 
     const getBranchBadge = (u: User) => {
         const branchName = u.branch?.name;
-        if (!branchName) return <span className="text-xs text-gray-400 italic">Sin sede</span>;
+        if (!branchName) {
+            if (u.branch_id === 0 || u.branch_id === null) {
+                return <span className="px-2 py-0.5 bg-slate-800 text-white text-[10px] font-black rounded-full shadow-sm border border-slate-700 tracking-tighter">MASTER / TODAS</span>;
+            }
+            return <span className="text-xs text-gray-400 italic">Sin sede</span>;
+        }
         const color = u.branch && (u.branch as any).color ? (u.branch as any).color : '#4F46E5';
         return (
             <span className="px-2 py-0.5 text-xs font-bold rounded-full text-white" style={{ backgroundColor: color }}>

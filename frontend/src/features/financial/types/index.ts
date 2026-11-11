@@ -1,4 +1,5 @@
 import type { Branch } from '../../configuration/types';
+import type { Client, Amenity, AmenityHistory } from '../../operative/types';
 
 export interface PaymentMethod {
     id: number;
@@ -29,6 +30,7 @@ export interface Service {
     price: number;
     is_active: boolean;
     is_amenity: boolean;
+    is_room_rate: boolean;
     branch_id: number;
     created_at: string;
 }
@@ -87,6 +89,8 @@ export interface Receipt {
     reference?: string;
     exchange_rate?: number;
     exchange_currency?: string;
+    branch_id?: number;
+    igtf_amount?: number;
 }
 
 export interface Pedido {
@@ -115,18 +119,25 @@ export interface Orden {
     discount_type: 'amount' | 'percentage';
     tax: number;
     total: number;
+    igtf_amount?: number;
     status: PaymentStatus;
+    apply_tax: boolean;
     details: Pedido[];
     receipts: Receipt[];
+    client?: Client;
 }
 
 export interface PurchaseDetail {
     id?: number;
     purchase_id?: number;
-    product_id?: number | null;
+    product_id?: number;
+    consumable_id?: number;
+    item_type: 'product' | 'consumable';
     description?: string;
     quantity: number;
+    unit?: string;
     unit_cost: number;
+    sales_price?: number;
     subtotal: number;
     // UI Helper
     productName?: string;
@@ -142,6 +153,7 @@ export interface Purchase {
     tax: number;
     total: number;
     status: PaymentStatus;
+    category?: string;
     details: PurchaseDetail[];
     receipts: Receipt[];
 }
@@ -158,6 +170,9 @@ export interface Expense {
     payment_method?: string;
     exchange_rate?: number;
     exchange_currency?: string;
+    subtotal?: number;
+    tax?: number;
+    igtf_amount?: number;
 }
 
 export interface ClientStatement {
@@ -167,6 +182,8 @@ export interface ClientStatement {
     balance: number;
     orders: Orden[];
     receipts: Receipt[];
+    amenities?: Amenity[];
+    amenity_history?: AmenityHistory[];
 }
 
 export interface CashCategory {
@@ -182,6 +199,8 @@ export interface CashMovement {
     id: number;
     branch_id: number;
     amount: number;
+    exchange_rate?: number;
+    exchange_currency?: string;
     type: "income" | "expense";
     category: string;
     description?: string;
@@ -226,12 +245,22 @@ export interface OccupancyStats {
 }
 
 export interface DashboardStats {
-    total_sales: number;
-    total_expenses: number;
-    net_profit: number;
+    total_sales_eur: number;
+    total_sales_usd: number;
+    total_expenses_eur: number;
+    total_expenses_usd: number;
     sales_trend: TimeSeriesData[];
     expenses_trend: TimeSeriesData[];
     category_distribution: CategoryDistribution[];
     occupancy_stats?: OccupancyStats | null;
     branch_id: number;
+}
+
+export interface ManagementDashboard {
+    income_trend: any[];
+    orders_by_branch: any[];
+    mayor_nest_performance: Record<string, any[]>;
+    monthly_details: any[];
+    year: number;
+    month: number;
 }

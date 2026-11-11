@@ -1,9 +1,2 @@
-from .configuration import *
-from .crm import *
-from .financial import *
-from .operative import *
-from .orders_audit import *
-from .providers import *
-from .quotes import *
-from .system import *
-from .user import *
+from . import auth, crm, financial, operative, user
+from .financial import quotes, providers

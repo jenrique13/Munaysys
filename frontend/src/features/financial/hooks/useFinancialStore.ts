@@ -11,12 +11,15 @@ import type {
     CashCategory,
     FinancialSummary,
     DashboardStats,
-    PaymentMethod
+    PaymentMethod,
+    Consumable,
+    ManagementDashboard
 } from '../types';
 import { financialService } from '../services/financial.service';
 
 interface FinancialState {
     products: Product[];
+    consumables: Consumable[];
     orders: Orden[];
     purchases: Purchase[];
     expenses: Expense[];
@@ -27,21 +30,24 @@ interface FinancialState {
     paymentMethods: PaymentMethod[];
     financialSummary: FinancialSummary | null;
     dashboardStats: DashboardStats | null;
+    managementDashboard: ManagementDashboard | null;
     clientStatement: ClientStatement | null;
     isLoading: boolean;
     error: string | null;
 
     fetchProducts: (branchId?: number) => Promise<void>;
-    fetchOrders: (branchId?: number) => Promise<void>;
+    fetchConsumables: (branchId?: number) => Promise<void>;
+    fetchOrders: (branchId?: number, search?: string, status?: string) => Promise<void>;
     fetchPurchases: (branchId?: number) => Promise<void>;
     fetchExpenses: (branchId?: number) => Promise<void>;
     fetchReceipts: (orderId?: number, purchaseId?: number) => Promise<void>;
-    fetchClientStatement: (clientId: number) => Promise<ClientStatement | null>;
+    fetchClientStatement: (clientId: number, month?: number, year?: number) => Promise<ClientStatement | null>;
     fetchReceivables: (branchId?: number) => Promise<void>;
     fetchCashMovements: (branchId?: number, month?: number, year?: number) => Promise<void>;
     fetchCashCategories: () => Promise<void>;
     fetchFinancialSummary: (branchId?: number, month?: number, year?: number) => Promise<void>;
     fetchDashboardStats: (branchId?: number) => Promise<void>;
+    fetchManagementDashboard: (month?: number, year?: number) => Promise<void>;
     fetchPaymentMethods: (branchId?: number) => Promise<void>;
 
     createProduct: (data: Partial<Product>) => Promise<boolean>;
@@ -60,6 +66,7 @@ interface FinancialState {
 
 export const useFinancialStore = create<FinancialState>((set, get) => ({
     products: [],
+    consumables: [],
     orders: [],
     purchases: [],
     expenses: [],
@@ -70,6 +77,7 @@ export const useFinancialStore = create<FinancialState>((set, get) => ({
     paymentMethods: [],
     financialSummary: null,
     dashboardStats: null,
+    managementDashboard: null,
     clientStatement: null,
     isLoading: false,
     error: null,
@@ -82,10 +90,18 @@ export const useFinancialStore = create<FinancialState>((set, get) => ({
         } catch (e: any) { set({ error: e.message, isLoading: false }); }
     },
 
-    fetchOrders: async (branchId) => {
+    fetchConsumables: async () => {
         set({ isLoading: true, error: null });
         try {
-            const orders = await financialService.getOrders(branchId);
+            const consumables = await financialService.getConsumables();
+            set({ consumables, isLoading: false });
+        } catch (e: any) { set({ error: e.message, isLoading: false }); }
+    },
+
+    fetchOrders: async (branchId, search, status) => {
+        set({ isLoading: true, error: null });
+        try {
+            const orders = await financialService.getOrders(branchId, search, status);
             set({ orders, isLoading: false });
         } catch (e: any) { set({ error: e.message, isLoading: false }); }
     },
@@ -114,10 +130,10 @@ export const useFinancialStore = create<FinancialState>((set, get) => ({
         } catch (e: any) { set({ error: e.message, isLoading: false }); }
     },
 
-    fetchClientStatement: async (clientId) => {
+    fetchClientStatement: async (clientId, month, year) => {
         set({ isLoading: true, error: null });
         try {
-            const data = await financialService.getClientStatement(clientId);
+            const data = await financialService.getClientStatement(clientId, month, year);
             set({ clientStatement: data, isLoading: false });
             return data;
         } catch (e: any) {
@@ -163,6 +179,14 @@ export const useFinancialStore = create<FinancialState>((set, get) => ({
         try {
             const dashboardStats = await financialService.getDashboardStats(branchId);
             set({ dashboardStats, isLoading: false });
+        } catch (e: any) { set({ error: e.message, isLoading: false }); }
+    },
+
+    fetchManagementDashboard: async (month, year) => {
+        set({ isLoading: true, error: null });
+        try {
+            const managementDashboard = await financialService.getManagementDashboard(month, year);
+            set({ managementDashboard, isLoading: false });
         } catch (e: any) { set({ error: e.message, isLoading: false }); }
     },
 

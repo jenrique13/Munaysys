@@ -13,6 +13,10 @@ export interface Client {
     created_at: string;
     active_membership_name?: string;
     has_active_membership: boolean;
+    branch?: {
+        id: number;
+        name: string;
+    };
 }
 
 export interface Office {
@@ -37,8 +41,16 @@ export interface Room {
     hourly_rate: number;
     status: string; // disponible | ocupado | mantenimiento
     is_active: boolean;
+    is_occupied?: boolean;
+    occupancy_today_pct?: number;
     amenities_json: string[];
     description?: string;
+}
+
+export interface AuthorizedPerson {
+    name: string;
+    last_name: string;
+    document: string;
 }
 
 export interface Membership {
@@ -51,8 +63,13 @@ export interface Membership {
     hours_included: number;
     hours_used: number;
     price: number;
+    billing_address?: string;
     status: string; // active | expired | cancelled
+    authorized_persons_json?: AuthorizedPerson[];
+    custom_contract_html?: string | null;
     created_at: string;
+    client?: Client;
+    office?: Office;
 }
 
 export interface Amenity {
@@ -81,11 +98,13 @@ export interface AmenityHistory {
     change: number;
     reason?: string;
     created_at: string;
+    amenity?: Amenity;
 }
 
 export interface Booking {
     id: number;
     room_id: number;
+    service_id?: number;
     client_id: number;
     start_time: string;
     end_time: string;
@@ -106,4 +125,37 @@ export interface ContractTemplate {
     branch_id?: number;
     is_active: boolean;
     created_at: string;
+}
+
+export interface SpaceCategory {
+    id: number;
+    name: string;
+    description?: string;
+    is_active: boolean;
+    branch_id?: number;
+}
+
+export interface RoomType {
+    id: number;
+    name: string;
+    description?: string;
+    is_active: boolean;
+    branch_id?: number;
+}
+
+export interface AmenityTemplateItem {
+    id: number;
+    template_id: number;
+    service_id: number;
+    quantity: number;
+}
+
+export interface AmenityTemplate {
+    id: number;
+    name: string;
+    space_type: string;
+    category_name: string;
+    branch_id?: number;
+    is_active: boolean;
+    items: AmenityTemplateItem[];
 }

@@ -70,10 +70,15 @@ const ServicesPage: React.FC = () => {
                                             {item.description && <p className="text-xs text-gray-400 mt-0.5">{item.description}</p>}
                                         </td>
                                         <td className="p-4">
-                                            <span className="font-semibold text-gray-700">${item.price?.toLocaleString('es-CL')}</span>
+                                            <span className="font-semibold text-gray-700">€{item.price?.toLocaleString('es-CL')}</span>
                                             {item.is_amenity && (
                                                 <span className="ml-2 px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-full uppercase tracking-wider">
                                                     Amenidad
+                                                </span>
+                                            )}
+                                            {item.is_room_rate && (
+                                                <span className="ml-2 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full uppercase tracking-wider">
+                                                    Tarifa Sala
                                                 </span>
                                             )}
                                         </td>
@@ -102,11 +107,11 @@ const ServicesPage: React.FC = () => {
 
 // ── Form Modal ──────────────────────────────────────────────────────────────
 const ServiceFormModal: React.FC<{ initialData: Partial<Service> | null; onClose: () => void; branchId: number }> = ({ initialData, onClose, branchId }) => {
-    const { createService, updateService } = useInventoryStore();
+    const { createService, updateService, services } = useInventoryStore();
     const isEdit = !!initialData;
 
     const [form, setForm] = useState<Partial<Service>>(
-        initialData ? { ...initialData } : { name: '', description: '', price: 0, is_active: true, is_amenity: false, branch_id: branchId }
+        initialData ? { ...initialData } : { name: '', description: '', price: 0, is_active: true, is_amenity: false, is_room_rate: false, branch_id: branchId }
     );
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -114,6 +119,8 @@ const ServiceFormModal: React.FC<{ initialData: Partial<Service> | null; onClose
         const ok = isEdit && form.id ? await updateService(form.id, form) : await createService(form);
         if (ok) onClose();
     };
+
+    const uniqueDescriptions = Array.from(new Set(services.map(s => s.description).filter(Boolean)));
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -132,13 +139,22 @@ const ServiceFormModal: React.FC<{ initialData: Partial<Service> | null; onClose
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Costo al Cliente ($)</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Costo al Cliente (€)</label>
                         <input type="number" step="0.01" min="0" required value={form.price ?? 0} onChange={e => setForm(p => ({ ...p, price: +e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Descripción / Notas Adicionales</label>
-                        <textarea value={form.description || ''} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+                        <select
+                            value={form.description || ''} 
+                            onChange={e => setForm(p => ({ ...p, description: e.target.value }))} 
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                        >
+                            <option value="">Seleccione...</option>
+                            {uniqueDescriptions.map((desc, idx) => (
+                                <option key={idx} value={desc}>{desc}</option>
+                            ))}
+                        </select>
                     </div>
 
                     <div className="flex items-center gap-2 py-2">
@@ -151,6 +167,19 @@ const ServiceFormModal: React.FC<{ initialData: Partial<Service> | null; onClose
                         />
                         <label htmlFor="is_amenity" className="text-sm font-medium text-gray-700 cursor-pointer">
                             Marcar como Amenidad (disponible para cuotas mensuales)
+                        </label>
+                    </div>
+
+                    <div className="flex items-center gap-2 py-2">
+                        <input 
+                            type="checkbox" 
+                            id="is_room_rate" 
+                            checked={form.is_room_rate || false} 
+                            onChange={e => setForm(p => ({ ...p, is_room_rate: e.target.checked }))}
+                            className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                        />
+                        <label htmlFor="is_room_rate" className="text-sm font-medium text-gray-700 cursor-pointer">
+                            Marcar como Tarifa de Sala (exclusivo para reservas de salas)
                         </label>
                     </div>
 

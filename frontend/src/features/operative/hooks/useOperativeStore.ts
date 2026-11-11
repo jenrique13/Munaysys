@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Client, Office, Room, Membership, Amenity, Booking, ContractTemplate } from '../types';
+import type { Client, Office, Room, Membership, Amenity, Booking, ContractTemplate, SpaceCategory, RoomType, AmenityTemplate } from '../types';
 import { operativeService } from '../services/operative.service';
 
 interface OperativeState {
@@ -9,8 +9,10 @@ interface OperativeState {
     memberships: Membership[];
     amenities: Amenity[];
     bookings: Booking[];
+    amenityTemplates: AmenityTemplate[];
     isLoading: boolean;
     error: string | null;
+    clearError: () => void;
 
     fetchClients: (branchId?: number, search?: string) => Promise<void>;
     fetchOffices: (branchId?: number) => Promise<void>;
@@ -19,6 +21,7 @@ interface OperativeState {
     fetchMemberships: (branchId?: number) => Promise<void>;
     fetchClientMemberships: (clientId: number) => Promise<Membership[]>;
     fetchAmenities: (branchId?: number, clientId?: number, spaceId?: number, spaceType?: string) => Promise<Amenity[]>;
+    fetchAmenityTemplates: (branchId?: number) => Promise<void>;
 
     createClient: (data: Partial<Client>) => Promise<boolean>;
     updateClient: (id: number, data: Partial<Client>) => Promise<boolean>;
@@ -37,6 +40,8 @@ interface OperativeState {
 
     createBooking: (data: Partial<Booking>) => Promise<{ ok: boolean; conflict?: boolean }>;
     updateBookingStatus: (id: number, status: string) => Promise<boolean>;
+    updateBooking: (id: number, data: Partial<Booking>) => Promise<boolean>;
+    deleteBooking: (id: number) => Promise<boolean>;
 
     // Contract Templates
     contractTemplates: ContractTemplate[];
@@ -44,6 +49,19 @@ interface OperativeState {
     createContractTemplate: (data: Partial<ContractTemplate>) => Promise<boolean>;
     updateContractTemplate: (id: number, data: Partial<ContractTemplate>) => Promise<boolean>;
     deleteContractTemplate: (id: number) => Promise<boolean>;
+
+    // Catalogs
+    spaceCategories: SpaceCategory[];
+    fetchSpaceCategories: (branchId?: number) => Promise<void>;
+    createSpaceCategory: (data: Partial<SpaceCategory>) => Promise<boolean>;
+    updateSpaceCategory: (id: number, data: Partial<SpaceCategory>) => Promise<boolean>;
+    deleteSpaceCategory: (id: number) => Promise<boolean>;
+
+    roomTypes: RoomType[];
+    fetchRoomTypes: (branchId?: number) => Promise<void>;
+    createRoomType: (data: Partial<RoomType>) => Promise<boolean>;
+    updateRoomType: (id: number, data: Partial<RoomType>) => Promise<boolean>;
+    deleteRoomType: (id: number) => Promise<boolean>;
 }
 
 export const useOperativeStore = create<OperativeState>((set, get) => ({
@@ -53,9 +71,13 @@ export const useOperativeStore = create<OperativeState>((set, get) => ({
     memberships: [],
     amenities: [],
     bookings: [],
+    amenityTemplates: [],
     contractTemplates: [],
+    spaceCategories: [],
+    roomTypes: [],
     isLoading: false,
     error: null,
+    clearError: () => set({ error: null }),
 
     fetchClients: async (branchId, search) => {
         set({ isLoading: true, error: null });
@@ -107,6 +129,13 @@ export const useOperativeStore = create<OperativeState>((set, get) => ({
         const data = await operativeService.getAmenities(branchId, clientId, spaceId, spaceType);
         set({ amenities: data });
         return data;
+    },
+
+    fetchAmenityTemplates: async (branchId) => {
+        try {
+            const data = await operativeService.getAmenityTemplates(branchId);
+            set({ amenityTemplates: data });
+        } catch (e: any) { set({ error: e.message }); }
     },
 
     createClient: async (data) => {
@@ -211,6 +240,20 @@ export const useOperativeStore = create<OperativeState>((set, get) => ({
             return true;
         } catch (e: any) { set({ error: e.message }); return false; }
     },
+    updateBooking: async (id, data) => {
+        try {
+            await operativeService.updateBooking(id, data);
+            await get().fetchBookings();
+            return true;
+        } catch (e: any) { set({ error: e.message }); return false; }
+    },
+    deleteBooking: async (id) => {
+        try {
+            await operativeService.deleteBooking(id);
+            await get().fetchBookings();
+            return true;
+        } catch (e: any) { set({ error: e.message }); return false; }
+    },
 
     fetchContractTemplates: async () => {
         try {
@@ -236,6 +279,57 @@ export const useOperativeStore = create<OperativeState>((set, get) => ({
         try {
             await operativeService.deleteContractTemplate(id);
             await get().fetchContractTemplates();
+            return true;
+        } catch (e: any) { set({ error: e.message }); return false; }
+    },
+
+    // Catalogs
+    fetchSpaceCategories: async (branchId) => {
+        try {
+            const data = await operativeService.getSpaceCategories(branchId);
+            set({ spaceCategories: data });
+        } catch (e: any) { set({ error: e.message }); }
+    },
+    createSpaceCategory: async (data) => {
+        try {
+            await operativeService.createSpaceCategory(data);
+            return true;
+        } catch (e: any) { set({ error: e.message }); return false; }
+    },
+    updateSpaceCategory: async (id, data) => {
+        try {
+            await operativeService.updateSpaceCategory(id, data);
+            return true;
+        } catch (e: any) { set({ error: e.message }); return false; }
+    },
+    deleteSpaceCategory: async (id) => {
+        try {
+            await operativeService.deleteSpaceCategory(id);
+            return true;
+        } catch (e: any) { set({ error: e.message }); return false; }
+    },
+
+    fetchRoomTypes: async (branchId) => {
+        try {
+            const data = await operativeService.getRoomTypes(branchId);
+            set({ roomTypes: data });
+        } catch (e: any) { set({ error: e.message }); }
+    },
+    createRoomType: async (data) => {
+        try {
+            await operativeService.createRoomType(data);
+            return true;
+        } catch (e: any) { set({ error: e.message }); return false; }
+    },
+    updateRoomType: async (id, data) => {
+        try {
+            await operativeService.updateRoomType(id, data);
+            return true;
+        } catch (e: any) { set({ error: e.message }); return false; }
+    },
+    deleteRoomType: async (id) => {
+        try {
+            await operativeService.deleteRoomType(id);
             return true;
         } catch (e: any) { set({ error: e.message }); return false; }
     },

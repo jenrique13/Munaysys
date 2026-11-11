@@ -1,35 +1,36 @@
-import axios from 'axios';
-import type { DashboardKPIs, RevenueTrend, OccupancyStat, SedePerformance } from '../types';
+import api from '../../../services/api';
+import type { DashboardKPIs, RevenueTrend, OccupancyStat, SedePerformance, SalesCrmDashboardData, OperatorDashboardData } from '../types';
 
-const API_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000/api/v1`;
-
-const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
-    return {
-        headers: {
-            Authorization: `Bearer ${token}`
-        }
-    };
-};
+const BASE = '/dashboards';
 
 export const dashboardService = {
     getKPIs: async (): Promise<DashboardKPIs> => {
-        const response = await axios.get(`${API_URL}/dashboards/kpis`, getAuthHeaders());
+        const response = await api.get(`${BASE}/kpis`);
         return response.data;
     },
 
     getRevenueTrend: async (): Promise<RevenueTrend[]> => {
-        const response = await axios.get(`${API_URL}/dashboards/revenue-trend`, getAuthHeaders());
+        const response = await api.get(`${BASE}/revenue-trend`);
         return response.data;
     },
 
     getOccupancyStats: async (): Promise<OccupancyStat[]> => {
-        const response = await axios.get(`${API_URL}/dashboards/occupancy-stats`, getAuthHeaders());
+        const response = await api.get(`${BASE}/occupancy-stats`);
         return response.data;
     },
 
     getSedePerformance: async (): Promise<SedePerformance[]> => {
-        const response = await axios.get(`${API_URL}/dashboards/sede-performance`, getAuthHeaders());
+        const response = await api.get(`${BASE}/sede-performance`);
+        return response.data;
+    },
+
+    getSalesCrmDashboard: async (period: string = 'monthly'): Promise<SalesCrmDashboardData> => {
+        const response = await api.get(`${BASE}/sales-crm`, { params: { period } });
+        return response.data;
+    },
+
+    getOperatorDashboard: async (): Promise<OperatorDashboardData> => {
+        const response = await api.get(`${BASE}/operator`);
         return response.data;
     }
 };

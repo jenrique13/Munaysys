@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status, Header
+from fastapi import Depends, HTTPException, status, Header, Query
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session, joinedload
@@ -7,9 +7,14 @@ from typing import Optional
 from app import models
 from app.config import settings
 from app.database import get_db
-from app.schemas.user import TokenPayload
+from app.schemas.auth.token import TokenPayload
+from app.uow.unit_of_work import UnitOfWork
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
+
+def get_uow(db: Session = Depends(get_db)):
+    """Provides a UnitOfWork instance for transaction management."""
+    return UnitOfWork(db)
 
 def get_current_user(
     db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)
@@ -39,20 +44,25 @@ def get_current_user(
 
 def get_target_branch_id(
     current_user: models.User = Depends(get_current_user),
-    x_branch_id: Optional[int] = Header(None)
+    x_branch_id: Optional[int] = Header(None),
+    branch_id: Optional[int] = Query(None)
 ) -> int:
     """
     Determina la sucursal objetivo para la consulta.
-    Si el usuario es Gerente o Super Admin, respeta el header X-Branch-Id (0 = todas).
+    Si el usuario es Gerente o Super Admin, respeta el header X-Branch-Id o el query param branch_id (0 = todas).
     De lo contrario, SIEMPRE devuelve la sucursal del usuario (nunca 0 por header externo).
     """
-    is_privileged = current_user.is_superuser or (current_user.role and current_user.role.name in ["Gerente", "Ventas"])
+    privileged_roles = ["Super Administrador", "Gerente", "Ventas", "Coordinador"]
+    is_privileged = current_user.is_superuser or (current_user.role and current_user.role.name in privileged_roles)
+    
+    # Prefer query parameter, then header
+    resolved_id = branch_id if branch_id is not None else x_branch_id
     
     # Solo usuarios privilegiados pueden ver todas las sedes o cambiar de sede
-    if is_privileged and x_branch_id is not None:
-        return x_branch_id
+    if is_privileged and resolved_id is not None:
+        return resolved_id
     
-    # Usuarios normales: siempre su propia sede, ignorando el header
+    # Usuarios normales: siempre su propia sede, ignorando parámetros externos
     return current_user.branch_id or 0
 
 def get_current_client(

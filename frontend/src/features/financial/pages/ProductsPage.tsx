@@ -71,7 +71,7 @@ const ProductsPage: React.FC = () => {
                                             {item.description && <p className="text-xs text-gray-400 mt-0.5">{item.description}</p>}
                                         </td>
                                         <td className="p-4">
-                                            <span className="font-semibold text-gray-700">${item.price?.toLocaleString('es-CL')}</span>
+                                            <span className="font-semibold text-gray-700">€{item.price?.toLocaleString('es-CL')}</span>
                                         </td>
                                         <td className="p-4">
                                             <span className={`px-2 py-1 rounded-full text-xs font-semibold ${item.stock > 10 ? 'bg-green-100 text-green-700' : item.stock > 0 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
@@ -148,7 +148,7 @@ const ProductFormModal: React.FC<{ initialData: Partial<Product> | null; onClose
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Precio de venta ($)</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Precio de venta (€)</label>
                             <input type="number" step="0.01" min="0" required value={form.price ?? 0} onChange={e => setForm(p => ({ ...p, price: +e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
                         </div>
                         <div>

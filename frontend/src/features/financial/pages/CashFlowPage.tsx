@@ -4,7 +4,7 @@ import { useSystemStore } from '../../system/hooks/useSystemStore';
 import { useAuthStore } from '../../auth/hooks/useAuthStore';
 import { useOperativeStore } from '../../operative/hooks/useOperativeStore';
 import { useProvidersStore } from '../hooks/useProvidersStore';
-import { formatCurrency, formatBs } from '../../../utils/format';
+import { formatCurrency, formatBs, formatDate } from '../../../utils/format';
 import {
     Plus, Search, ArrowUpCircle, ArrowDownCircle, History,
     Filter, DollarSign, Calendar, Settings
@@ -18,7 +18,7 @@ const CashFlowPage: React.FC = () => {
         fetchPaymentMethods
     } = useFinancialStore();
     const { user, selectedBranchId } = useAuthStore();
-    const { bcvRateUsd } = useSystemStore();
+    const { bcvRateUsd, bcvRateEur, fetchBcvRates } = useSystemStore();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
@@ -35,8 +35,10 @@ const CashFlowPage: React.FC = () => {
         category: string;
         description: string;
         client_name?: string;
-        provider_name?: string;
+        provider_name: string;
         payment_method?: string;
+        exchange_rate?: number;
+        exchange_currency?: string;
     }>({
         amount: 0,
         type: 'income',
@@ -44,7 +46,9 @@ const CashFlowPage: React.FC = () => {
         description: '',
         client_name: '',
         provider_name: '',
-        payment_method: ''
+        payment_method: '',
+        exchange_rate: 0,
+        exchange_currency: 'usd'
     });
 
     const { clients, fetchClients } = useOperativeStore();
@@ -57,7 +61,8 @@ const CashFlowPage: React.FC = () => {
         fetchClients();
         fetchProviders();
         fetchPaymentMethods(selectedBranchId || undefined);
-    }, [fetchCashMovements, fetchFinancialSummary, fetchCashCategories, fetchClients, fetchProviders, fetchPaymentMethods, selectedBranchId, filterMonth, filterYear]);
+        fetchBcvRates();
+    }, [fetchCashMovements, fetchFinancialSummary, fetchCashCategories, fetchClients, fetchProviders, fetchPaymentMethods, fetchBcvRates, selectedBranchId, filterMonth, filterYear]);
 
     const filteredMovements = cashMovements.filter(m => {
         const matchesSearch = m.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -189,45 +194,68 @@ const CashFlowPage: React.FC = () => {
                     <div className="p-12 text-center text-gray-400">Cargando movimientos...</div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
+                        <table className="min-w-full divide-y divide-gray-200 text-left">
+                            <thead className="bg-gray-50 hidden md:table-header-group">
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sede</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría / Entidad</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción</th>
+                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Tasa de Cambio</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Monto</th>
                                 </tr>
                             </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
+                            <tbody className="bg-gray-50 md:bg-white flex flex-col md:table-row-group gap-4 md:gap-0 p-4 md:p-0 md:divide-y md:divide-gray-200">
                                 {filteredMovements.map((m) => (
-                                    <tr key={m.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <tr key={m.id} className="hover:bg-gray-50 transition-colors flex flex-col md:table-row bg-white border md:border-0 border-gray-200 rounded-xl p-4 md:p-0 shadow-sm md:shadow-none">
+                                        <td className="px-0 py-2 md:px-6 md:py-4 md:whitespace-nowrap text-sm text-gray-500 flex justify-between items-center md:table-cell border-b md:border-0 border-gray-100">
+                                            <span className="md:hidden font-bold text-xs text-gray-400 uppercase">Fecha</span>
                                             <div className="flex items-center gap-2">
-                                                <Calendar size={14} />
-                                                {new Date(m.date).toLocaleString()}
+                                                <Calendar size={14} className="md:hidden" />
+                                                {formatDate(m.date)}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-slate-500">
+                                        <td className="px-0 py-2 md:px-6 md:py-4 md:whitespace-nowrap text-xs font-bold text-slate-500 flex justify-between items-center md:table-cell border-b md:border-0 border-gray-100">
+                                            <span className="md:hidden font-bold text-xs text-gray-400 uppercase">Sede</span>
                                             {m.branch?.name || `Sede #${m.branch_id}`}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className="px-2 py-1 text-[10px] font-bold uppercase rounded-md bg-gray-100 text-gray-600 block w-max mb-1">
-                                                {m.category}
-                                            </span>
-                                            {(m.client_name || m.provider_name) && (
-                                                <div className="text-xs text-gray-500 font-medium">
-                                                    {m.client_name ? `Cliente: ${m.client_name}` : `Prov: ${m.provider_name}`}
-                                                </div>
-                                            )}
+                                        <td className="px-0 py-2 md:px-6 md:py-4 md:whitespace-nowrap flex flex-col md:table-cell border-b md:border-0 border-gray-100">
+                                            <span className="md:hidden font-bold text-xs text-gray-400 uppercase mb-1">Categoría / Entidad</span>
+                                            <div className="flex flex-col items-end md:items-start">
+                                                <span className="px-2 py-1 text-[10px] font-bold uppercase rounded-md bg-gray-100 text-gray-600 block w-max mb-1">
+                                                    {m.category}
+                                                </span>
+                                                {(m.client_name || m.provider_name) && (
+                                                    <div className="text-xs text-gray-500 font-medium">
+                                                        {m.client_name ? `Cliente: ${m.client_name}` : `Prov: ${m.provider_name}`}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-gray-700">
+                                        <td className="px-0 py-2 md:px-6 md:py-4 text-sm text-gray-700 flex flex-col md:table-cell border-b md:border-0 border-gray-100 text-right md:text-left">
+                                            <span className="md:hidden font-bold text-xs text-gray-400 uppercase mb-1 self-start">Descripción</span>
                                             {m.description || '-'}
                                             {m.payment_method && (
                                                 <span className="block text-[10px] text-gray-400 mt-1 uppercase font-bold tracking-widest">{m.payment_method}</span>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                                        <td className="px-0 py-2 md:px-6 md:py-4 md:whitespace-nowrap md:text-center flex justify-between items-center md:table-cell border-b md:border-0 border-gray-100">
+                                            <span className="md:hidden font-bold text-xs text-gray-400 uppercase">Tasa de Cambio</span>
+                                            {m.exchange_rate ? (
+                                                <div className="flex flex-col items-end md:items-center">
+                                                    <span className="text-xs font-bold text-indigo-600">
+                                                        {m.exchange_rate.toFixed(2)} BS
+                                                    </span>
+                                                    <span className="text-[10px] text-gray-400 uppercase font-bold tracking-tighter">
+                                                        /{m.exchange_currency || 'usd'}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-gray-300">-</span>
+                                            )}
+                                        </td>
+                                        <td className="px-0 py-2 md:px-6 md:py-4 md:whitespace-nowrap text-right flex justify-between items-center md:table-cell mt-2 md:mt-0">
+                                            <span className="md:hidden font-bold text-xs text-gray-400 uppercase">Monto</span>
                                             <div className="flex flex-col items-end">
                                                 <div className="flex items-center justify-end gap-2">
                                                     <span className={`text-sm font-bold ${m.type === 'income' ? 'text-emerald-600' : 'text-red-600'}`}>
@@ -243,13 +271,18 @@ const CashFlowPage: React.FC = () => {
                                                         {formatBs(m.amount, bcvRateUsd)}
                                                     </span>
                                                 )}
+                                                {((m as any).igtf_amount || 0) > 0 && (
+                                                    <span className="text-[10px] font-bold text-orange-600 uppercase border border-orange-200 bg-orange-50 px-1.5 rounded-full mt-1">
+                                                        + IGTF
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
                                 ))}
                                 {filteredMovements.length === 0 && (
                                     <tr>
-                                        <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
+                                        <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
                                             No se encontraron movimientos registrados
                                         </td>
                                     </tr>
@@ -372,13 +405,41 @@ const CashFlowPage: React.FC = () => {
                                 </select>
                             </div>
 
+                            <div className="bg-gray-50 border border-gray-200 p-3 rounded-lg mb-4">
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Tasa de Cambio a Aplicar</label>
+                                <div className="flex gap-2">
+                                    <button type="button" onClick={() => setFormData({ ...formData, exchange_currency: 'usd', exchange_rate: bcvRateUsd || 0 })} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${formData.exchange_currency === 'usd' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}>Dólar (USD)</button>
+                                    <button type="button" onClick={() => setFormData({ ...formData, exchange_currency: 'eur', exchange_rate: bcvRateEur || 0 })} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${formData.exchange_currency === 'eur' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}>Euro (EUR)</button>
+                                </div>
+                                
+                                <div className="mt-3">
+                                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Tasa Manual (BS/{formData.exchange_currency?.toUpperCase()})</label>
+                                    <input 
+                                        type="number" 
+                                        step="0.01" 
+                                        value={formData.exchange_rate} 
+                                        onChange={e => setFormData({ ...formData, exchange_rate: parseFloat(e.target.value) || 0 })}
+                                        className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm font-bold text-indigo-600 outline-none focus:ring-1 focus:ring-indigo-500"
+                                    />
+                                </div>
+
+                                <div className="mt-3 flex justify-between items-center px-1">
+                                    <span className="text-sm text-gray-600 font-medium">Equivalente en BS:</span>
+                                    <div className="text-right">
+                                        <span className="text-lg font-bold text-gray-900 block">
+                                            {formatBs(formData.amount, formData.exchange_rate || 0)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Descripción</label>
                                 <textarea
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-                                    rows={3}
+                                    rows={2}
                                     placeholder="Detalles del movimiento..."
                                 />
                             </div>

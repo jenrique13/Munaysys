@@ -18,7 +18,8 @@ export const authService = {
         // We use standard axios here because 'api' interceptor might block us if we don't have a token yet
         // and we want to target the backend directly.
         const response = await axios.post<{ access_token: string; token_type: string }>(
-            `${import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000/api/v1`}${BASE}/login`,
+          
+           `${import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000/api/v1`}${BASE}/login`,
             formData,
             { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
         );
@@ -28,6 +29,11 @@ export const authService = {
     // Uses the interceptor 'api' since we must be authenticated to check 'me'
     me: async () => {
         const response = await api.get(`${BASE}/me`);
+        return response.data;
+    },
+
+    refreshToken: async () => {
+        const response = await api.post<{ access_token: string; token_type: string }>(`${BASE}/refresh`);
         return response.data;
     }
 };

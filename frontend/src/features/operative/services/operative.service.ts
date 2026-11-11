@@ -1,5 +1,5 @@
 import api from '../../../services/api';
-import type { Client, Office, Room, Membership, Amenity, Booking, ContractTemplate, AmenityHistory } from '../types';
+import type { Client, Office, Room, Membership, Amenity, Booking, ContractTemplate, AmenityHistory, SpaceCategory, RoomType, AmenityTemplate } from '../types';
 import type { Service } from '../../financial/types';
 
 const BASE = '/operative';
@@ -7,7 +7,7 @@ const BASE = '/operative';
 export const operativeService = {
     // ── CLIENTS ──────────────────────────────
     getClients: async (branchId?: number, search?: string) => {
-        const res = await api.get<Client[]>(`${BASE}/clients`, { params: { branch_id: branchId, search, limit: 1000 } });
+        const res = await api.get<Client[]>(`${BASE}/clients`, { params: { branch_id: branchId, search, limit: 10000 } });
         return res.data;
     },
     createClient: async (data: Partial<Client>) => {
@@ -121,6 +121,14 @@ export const operativeService = {
         const res = await api.put<Booking>(`${BASE}/bookings/${id}/status`, { status });
         return res.data;
     },
+    updateBooking: async (id: number, data: Partial<Booking>) => {
+        const res = await api.put<Booking>(`${BASE}/bookings/${id}`, data);
+        return res.data;
+    },
+    deleteBooking: async (id: number) => {
+        const res = await api.delete(`${BASE}/bookings/${id}`);
+        return res.data;
+    },
 
     // ── CONTRACT TEMPLATES ────────────────────
     getContractTemplates: async () => {
@@ -141,5 +149,55 @@ export const operativeService = {
     },
     deleteContractTemplate: async (id: number) => {
         await api.delete(`${BASE}/contract-templates/${id}`);
+    },
+
+    // ── CATALOGS (Space Categories & Room Types) ──────────────
+    getSpaceCategories: async (branchId?: number) => {
+        const res = await api.get<SpaceCategory[]>(`${BASE}/space-categories`, { params: { branch_id: branchId } });
+        return res.data;
+    },
+    createSpaceCategory: async (data: Partial<SpaceCategory>) => {
+        const res = await api.post<SpaceCategory>(`${BASE}/space-categories`, data);
+        return res.data;
+    },
+    updateSpaceCategory: async (id: number, data: Partial<SpaceCategory>) => {
+        const res = await api.put<SpaceCategory>(`${BASE}/space-categories/${id}`, data);
+        return res.data;
+    },
+    deleteSpaceCategory: async (id: number) => {
+        await api.delete(`${BASE}/space-categories/${id}`);
+    },
+
+    getRoomTypes: async (branchId?: number) => {
+        const res = await api.get<RoomType[]>(`${BASE}/room-types`, { params: { branch_id: branchId } });
+        return res.data;
+    },
+    createRoomType: async (data: Partial<RoomType>) => {
+        const res = await api.post<RoomType>(`${BASE}/room-types`, data);
+        return res.data;
+    },
+    updateRoomType: async (id: number, data: Partial<RoomType>) => {
+        const res = await api.put<RoomType>(`${BASE}/room-types/${id}`, data);
+        return res.data;
+    },
+    deleteRoomType: async (id: number) => {
+        await api.delete(`${BASE}/room-types/${id}`);
+    },
+    
+    // ── AMENITY TEMPLATES ─────────────────────
+    getAmenityTemplates: async (branchId?: number) => {
+        const res = await api.get<AmenityTemplate[]>(`${BASE}/amenity-templates`, { params: { branch_id: branchId } });
+        return res.data;
+    },
+    createAmenityTemplate: async (data: Partial<AmenityTemplate>) => {
+        const res = await api.post<AmenityTemplate>(`${BASE}/amenity-templates`, data);
+        return res.data;
+    },
+    updateAmenityTemplate: async (id: number, data: Partial<AmenityTemplate>) => {
+        const res = await api.put<AmenityTemplate>(`${BASE}/amenity-templates/${id}`, data);
+        return res.data;
+    },
+    deleteAmenityTemplate: async (id: number) => {
+        await api.delete(`${BASE}/amenity-templates/${id}`);
     },
 };

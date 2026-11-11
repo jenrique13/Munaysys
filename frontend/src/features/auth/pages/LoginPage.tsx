@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { Eye, EyeOff, Lock, Mail, AlertCircle } from 'lucide-react';
-
+import logo from '../../../assets/nest-logo.png';
 export const LoginPage: React.FC = () => {
     const { user, login, isLoading, error, clearError } = useAuthStore();
     const navigate = useNavigate();
@@ -67,10 +67,10 @@ export const LoginPage: React.FC = () => {
                     </div>
 
                     <div className="w-20 h-20 mb-4 z-10 flex items-center justify-center overflow-hidden bg-white rounded-xl shadow-lg p-2 relative">
-                        <img 
-                            src="/src/assets/nest-logo.png" 
-                            alt="Nest Coworking" 
-                            className="w-full h-full object-contain z-10 relative" 
+                        <img
+                            src={logo}
+                            alt="Nest Coworking"
+                            className="w-full h-full object-contain z-10 relative"
                             onLoad={(e) => {
                                 const fallback = e.currentTarget.parentElement?.querySelector('.logo-fallback') as HTMLElement;
                                 if (fallback) fallback.style.display = 'none';
@@ -79,7 +79,7 @@ export const LoginPage: React.FC = () => {
                                 e.currentTarget.style.display = 'none';
                                 const fallback = e.currentTarget.parentElement?.querySelector('.logo-fallback') as HTMLElement;
                                 if (fallback) fallback.style.display = 'flex';
-                            }} 
+                            }}
                         />
                         <div className="logo-fallback absolute inset-0 flex items-center justify-center text-indigo-600 font-bold text-3xl">
                             N

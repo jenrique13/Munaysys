@@ -3,13 +3,25 @@ import { Plus, Edit2, Trash2, CreditCard, Tag, AlertCircle } from 'lucide-react'
 import { financialService } from '../services/financial.service';
 import type { PaymentMethod, CashCategory } from '../types';
 import { useAuthStore } from '../../../features/auth/hooks/useAuthStore';
+import { useOperativeStore } from '../../operative/hooks/useOperativeStore';
+import { LayoutDashboard, LogIn } from 'lucide-react'; // icons for tabs
 
 const CatalogsPage: React.FC = () => {
     const { selectedBranchId, user } = useAuthStore();
-    const [activeTab, setActiveTab] = useState<'payments' | 'expenses'>('payments');
+    const [activeTab, setActiveTab] = useState<'payments' | 'expenses' | 'spaces' | 'rooms'>('payments');
+
     
     const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
     const [cashCategories, setCashCategories] = useState<CashCategory[]>([]);
+    
+    // Operative Catalogs
+    const { 
+        spaceCategories, roomTypes, 
+        fetchSpaceCategories, fetchRoomTypes,
+        createSpaceCategory, updateSpaceCategory, deleteSpaceCategory,
+        createRoomType, updateRoomType, deleteRoomType
+    } = useOperativeStore();
+
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -31,9 +43,13 @@ const CatalogsPage: React.FC = () => {
             if (activeTab === 'payments') {
                 const data = await financialService.getPaymentMethods(selectedBranchId ?? undefined);
                 setPaymentMethods(data);
-            } else {
+            } else if (activeTab === 'expenses') {
                 const data = await financialService.getCashCategories();
                 setCashCategories(data);
+            } else if (activeTab === 'spaces') {
+                await fetchSpaceCategories(selectedBranchId ?? undefined);
+            } else if (activeTab === 'rooms') {
+                await fetchRoomTypes(selectedBranchId ?? undefined);
             }
             setError(null);
         } catch (err) {
@@ -53,31 +69,41 @@ const CatalogsPage: React.FC = () => {
             if (activeTab === 'payments') {
                 if (editingItem) {
                     await financialService.updatePaymentMethod(editingItem.id, {
-                        name: formData.name,
-                        description: formData.description,
-                        is_active: formData.is_active
+                        name: formData.name, description: formData.description, is_active: formData.is_active
                     });
                 } else {
                     await financialService.createPaymentMethod({ 
-                        name: formData.name, 
-                        description: formData.description, 
-                        is_active: formData.is_active
+                        name: formData.name, description: formData.description, is_active: formData.is_active
                     });
                 }
-            } else {
+            } else if (activeTab === 'expenses') {
                 if (editingItem) {
                     await financialService.updateCashCategory(editingItem.id, {
-                        name: formData.name,
-                        description: formData.description,
-                        is_active: formData.is_active,
-                        type: formData.type
+                        name: formData.name, description: formData.description, is_active: formData.is_active, type: formData.type
                     });
                 } else {
                     await financialService.createCashCategory({ 
-                        name: formData.name, 
-                        description: formData.description, 
-                        is_active: formData.is_active,
-                        type: formData.type
+                        name: formData.name, description: formData.description, is_active: formData.is_active, type: formData.type
+                    });
+                }
+            } else if (activeTab === 'spaces') {
+                if (editingItem) {
+                    await updateSpaceCategory(editingItem.id, {
+                        name: formData.name, description: formData.description, is_active: formData.is_active
+                    });
+                } else {
+                    await createSpaceCategory({ 
+                        name: formData.name, description: formData.description, is_active: formData.is_active, branch_id: selectedBranchId ?? undefined
+                    });
+                }
+            } else if (activeTab === 'rooms') {
+                if (editingItem) {
+                    await updateRoomType(editingItem.id, {
+                        name: formData.name, description: formData.description, is_active: formData.is_active
+                    });
+                } else {
+                    await createRoomType({ 
+                        name: formData.name, description: formData.description, is_active: formData.is_active, branch_id: selectedBranchId ?? undefined
                     });
                 }
             }
@@ -93,8 +119,12 @@ const CatalogsPage: React.FC = () => {
         try {
             if (activeTab === 'payments') {
                 await financialService.deletePaymentMethod(id);
-            } else {
+            } else if (activeTab === 'expenses') {
                 await financialService.deleteCashCategory(id);
+            } else if (activeTab === 'spaces') {
+                await deleteSpaceCategory(id);
+            } else if (activeTab === 'rooms') {
+                await deleteRoomType(id);
             }
             fetchData();
         } catch (err) {
@@ -128,7 +158,7 @@ const CatalogsPage: React.FC = () => {
                     className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition shadow-sm"
                 >
                     <Plus size={20} />
-                    {activeTab === 'payments' ? 'Nuevo Método' : 'Nueva Categoría'}
+                    {activeTab === 'payments' ? 'Nuevo Método' : activeTab === 'spaces' ? 'Nueva Categoría Espacio' : activeTab === 'rooms' ? 'Nuevo Tipo Sala' : 'Nueva Categoría'}
                 </button>
             </div>
 
@@ -152,6 +182,24 @@ const CatalogsPage: React.FC = () => {
                         Categorías de Caja
                     </div>
                 </button>
+                <button
+                    onClick={() => setActiveTab('spaces')}
+                    className={`px-6 py-3 font-medium text-sm border-b-2 transition ${activeTab === 'spaces' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                    <div className="flex items-center gap-2">
+                        <LayoutDashboard size={18} />
+                        Categorías de Espacios
+                    </div>
+                </button>
+                <button
+                    onClick={() => setActiveTab('rooms')}
+                    className={`px-6 py-3 font-medium text-sm border-b-2 transition ${activeTab === 'rooms' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                    <div className="flex items-center gap-2">
+                        <LogIn size={18} />
+                        Tipos de Salas
+                    </div>
+                </button>
             </div>
 
             {error && <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-6 flex items-center gap-2"><AlertCircle size={20}/> {error}</div>}
@@ -170,9 +218,9 @@ const CatalogsPage: React.FC = () => {
                     <tbody className="divide-y divide-gray-100">
                         {loading ? (
                             <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-400">Cargando...</td></tr>
-                        ) : (activeTab === 'payments' ? paymentMethods : cashCategories).length === 0 ? (
+                        ) : (activeTab === 'payments' ? paymentMethods : activeTab === 'expenses' ? cashCategories : activeTab === 'spaces' ? spaceCategories : roomTypes).length === 0 ? (
                             <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-400">No se encontraron elementos</td></tr>
-                        ) : (activeTab === 'payments' ? paymentMethods : cashCategories).map((item) => (
+                        ) : (activeTab === 'payments' ? paymentMethods : activeTab === 'expenses' ? cashCategories : activeTab === 'spaces' ? spaceCategories : roomTypes).map((item) => (
                             <tr key={item.id} className="hover:bg-gray-50 transition">
                                 <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
                                 {activeTab === 'expenses' && (
@@ -217,7 +265,7 @@ const CatalogsPage: React.FC = () => {
                 <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
                         <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                            <h2 className="text-xl font-bold text-gray-800">{editingItem ? 'Editar' : 'Nuevo'} {activeTab === 'payments' ? 'Método' : 'Categoría'}</h2>
+                            <h2 className="text-xl font-bold text-gray-800">{editingItem ? 'Editar' : 'Nuevo'} {activeTab === 'payments' ? 'Método' : activeTab === 'spaces' ? 'Categoría de Espacio' : activeTab === 'rooms' ? 'Tipo de Sala' : 'Categoría'}</h2>
                             <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 transition">×</button>
                         </div>
                         <form onSubmit={handleSave} className="p-6 space-y-4">

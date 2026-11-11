@@ -16,7 +16,7 @@ def render_html_to_pdf(template_name: str, context: dict) -> io.BytesIO:
         html_content = template.render(context)
         
         result = io.BytesIO()
-        pisa_status = pisa.CreatePDF(html_content, dest=result)
+        pisa_status = pisa.CreatePDF(html_content, dest=result, encoding='utf-8')
         
         if pisa_status.err:
             raise Exception("Error rendering PDF with pisa")
@@ -25,7 +25,9 @@ def render_html_to_pdf(template_name: str, context: dict) -> io.BytesIO:
         return result
     except Exception as e:
         import logging
-        logging.getLogger("uvicorn").error(f"Error generating PDF: {str(e)}")
+        import traceback
+        logging.getLogger("uvicorn.error").error(f"Error generating PDF {template_name}: {str(e)}")
+        logging.getLogger("uvicorn.error").error(traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al generar el PDF: {str(e)}"

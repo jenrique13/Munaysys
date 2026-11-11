@@ -167,7 +167,7 @@ export const ProspectosPage: React.FC = () => {
                                                 ) : <span className="text-gray-300 text-xs">—</span>}
                                             </td>
                                             <td className="px-4 py-3 text-gray-500 text-xs hidden xl:table-cell">
-                                                {new Date(lead.created_at).toLocaleDateString('es-VE')}
+                                                {new Date(lead.created_at).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                                             </td>
                                         </tr>
                                     );

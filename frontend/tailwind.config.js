@@ -7,6 +7,17 @@ export default {
   theme: {
     extend: {
       colors: {
+        base: '#FFFFFF',
+        muted: '#F3F4F6',
+        brand: {
+          primary: '#0F172A',
+          accent: '#2563EB',
+        },
+        state: {
+          success: '#22C55E',
+          warning: '#F59E0B',
+          danger: '#EF4444',
+        },
         indigo: {
           50: 'rgb(var(--color-primary-rgb) / 0.1)',
           100: 'rgb(var(--color-primary-rgb) / 0.15)',
@@ -20,7 +31,10 @@ export default {
           900: 'rgb(var(--color-primary-rgb) / 1)',
           950: 'rgb(var(--color-primary-rgb) / 1)',
         }
-      }
+      },
+      fontFamily: {
+        sans: ['Inter', 'Plus Jakarta Sans', 'sans-serif'],
+      },
     },
   },
   plugins: [],

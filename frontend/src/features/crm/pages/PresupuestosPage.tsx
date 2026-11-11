@@ -1,22 +1,23 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FileText, Plus, Search, Trash2, Edit3, CheckCircle, ShoppingCart, Printer, ChevronDown, X, Package, DoorOpen, Building2 } from 'lucide-react';
+import { FileText, Plus, Search, Trash2, Edit3, CheckCircle, ShoppingCart, Printer, ChevronDown, X, Package, DoorOpen, Building2, Briefcase } from 'lucide-react';
 import { useQuotesStore } from '../hooks/useQuotesStore';
 import { useCRMStore } from '../hooks/useCRMStore';
 import type { Quote, QuoteItemCreate, QuoteStatus } from '../types';
 import { financialService } from '../../financial/services/financial.service';
 import api from '../../../services/api';
 import html2pdf from 'html2pdf.js';
-
 import { useAuthStore } from '../../auth/hooks/useAuthStore';
 import { useConfigurationStore } from '../../configuration/hooks/useConfigurationStore';
-
+import { RoomBookingPicker } from '../../financial/components/RoomBookingPicker';
+import { SearchableSelect } from '../../../components/molecules/SearchableSelect';
+import logo from '../../../assets/nest-logo.png';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface CatalogItem {
     id: number;
     name: string;
     price: number;
-    type: 'product' | 'room' | 'office';
+    type: 'product' | 'room' | 'office' | 'service';
     extra?: string;
 }
 
@@ -33,12 +34,14 @@ const STATUS_CONFIG: Record<QuoteStatus, { label: string; bg: string; text: stri
 };
 const STATUS_ORDER: QuoteStatus[] = ['draft', 'sent', 'approved', 'rejected', 'converted'];
 
-const fmt = (v: number) => `$${v.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
+const fmt = (v: number) => `€${v.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // ─── Quote Detail / Print View ─────────────────────────────────────────────────
 
 const QuoteDetailView: React.FC<{ quote: Quote; onClose: () => void }> = ({ quote, onClose }) => {
     const [isDownloading, setIsDownloading] = useState(false);
+    const { branches } = useConfigurationStore();
+    const branchName = branches.find(b => b.id === quote.branch_id)?.name || 'Nest Coworking';
 
     const handleDownloadPdf = async () => {
         setIsDownloading(true);
@@ -89,9 +92,9 @@ const QuoteDetailView: React.FC<{ quote: Quote; onClose: () => void }> = ({ quot
                     <div>
                         <div className="flex items-center gap-2 mb-1">
                             <div className="w-10 h-10 flex items-center justify-center overflow-hidden">
-                                <img src="/src/assets/nest-logo.png" alt="Logo" className="w-full h-full object-contain" />
+                                <img src={logo} alt="Logo" className="w-full h-full object-contain" />
                             </div>
-                            <span className="text-2xl font-bold text-slate-800">Nest Coworking</span>
+                            <span className="text-2xl font-bold text-slate-800">{branchName}</span>
                         </div>
                         <p className="text-gray-500 text-sm">Sistema de Gestión Coworking</p>
                     </div>
@@ -113,17 +116,19 @@ const QuoteDetailView: React.FC<{ quote: Quote; onClose: () => void }> = ({ quot
                             <p className="text-gray-500 text-sm font-mono">CI/RIF: {quote.client?.ci_rif || quote.lead?.ci_rif}</p>}
                         {(quote.client?.email || quote.lead?.email) &&
                             <p className="text-gray-500 text-sm">{quote.client?.email || quote.lead?.email}</p>}
+                        {(quote.client?.phone || quote.lead?.phone) &&
+                            <p className="text-gray-500 text-sm">Tlf: {quote.client?.phone || quote.lead?.phone}</p>}
                         {quote.lead?.company && <p className="text-gray-500 text-sm">{quote.lead.company}</p>}
                     </div>
                     <div className="text-right space-y-1">
                         <div>
                             <p className="text-xs text-gray-400 uppercase font-semibold">Fecha de Emisión</p>
-                            <p className="text-gray-700">{new Date(quote.created_at).toLocaleDateString('es-VE')}</p>
+                            <p className="text-gray-700">{new Date(quote.created_at).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
                         </div>
                         {quote.expires_at && (
                             <div>
                                 <p className="text-xs text-gray-400 uppercase font-semibold">Válido hasta</p>
-                                <p className="text-gray-700">{new Date(quote.expires_at).toLocaleDateString('es-VE')}</p>
+                                <p className="text-gray-700">{new Date(quote.expires_at).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
                             </div>
                         )}
                     </div>
@@ -148,8 +153,15 @@ const QuoteDetailView: React.FC<{ quote: Quote; onClose: () => void }> = ({ quot
                     <tbody>
                         {quote.items.map((item, i) => (
                             <tr key={item.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                                <td className="px-4 py-3 text-gray-700 font-medium">{item.description}</td>
-                                <td className="px-4 py-3 text-center text-gray-600">{item.quantity}</td>
+                                <td className="px-4 py-3 text-gray-700 font-medium">
+                                    {item.description}
+                                    {item.item_type === 'room' && item.start_time && (
+                                        <div className="text-[10px] text-indigo-500 font-bold mt-0.5">
+                                            Reserva: {new Date(item.start_time).toLocaleString()} - {item.end_time ? new Date(item.end_time).toLocaleString() : ''}
+                                        </div>
+                                    )}
+                                </td>
+                                <td className="px-4 py-3 text-center text-gray-600 font-mono">{item.quantity}</td>
                                 <td className="px-4 py-3 text-right text-gray-600 font-mono">{fmt(item.unit_price)}</td>
                                 <td className="px-4 py-3 text-right text-gray-500 font-mono">{item.discount > 0 ? `-${fmt(item.discount)}` : '—'}</td>
                                 <td className="px-4 py-3 text-right text-gray-800 font-semibold font-mono">{fmt(item.subtotal)}</td>
@@ -167,13 +179,13 @@ const QuoteDetailView: React.FC<{ quote: Quote; onClose: () => void }> = ({ quot
                         </div>
                         {quote.discount > 0 && (
                             <div className="flex justify-between text-sm text-red-500">
-                                <span>Descuento</span>
-                                <span className="font-mono">-{fmt(quote.discount)}</span>
+                                <span>Descuento {quote.discount_type === 'percentage' ? `(${quote.discount}%)` : ''}</span>
+                                <span className="font-mono">-{fmt(quote.discount_type === 'percentage' ? quote.subtotal * (quote.discount / 100) : quote.discount)}</span>
                             </div>
                         )}
                         <div className="flex justify-between text-sm text-gray-600">
                             <span>IVA (16%)</span>
-                            <span className="font-mono">{fmt(quote.tax)}</span>
+                            <span className="font-mono">{quote.apply_tax ? fmt(quote.tax) : fmt(0)}</span>
                         </div>
                         <div className="flex justify-between text-base font-bold text-slate-800 border-t-2 border-slate-800 pt-2">
                             <span>TOTAL</span>
@@ -192,6 +204,7 @@ const QuoteDetailView: React.FC<{ quote: Quote; onClose: () => void }> = ({ quot
 
                 {/* Footer */}
                 <div className="border-t border-gray-200 pt-6 text-center text-xs text-gray-400">
+                    <p className="text-gray-700 text-sm">Incluye hidratacion y cafe guayoyo. TV, cable HDMI en Salas disponibles en Salas de Reuniones.</p>
                     <p>Este presupuesto es válido únicamente durante el período indicado.</p>
                     <p className="mt-1">Nest Coworking · Sistema de Gestión de Coworking</p>
                 </div>
@@ -225,27 +238,42 @@ const QuoteFormModal: React.FC<{
     const [branchId, setBranchId] = useState<number>(0);
     const [title, setTitle] = useState('');
     const [leadId, setLeadId] = useState<number | null>(null);
+    const [clientId, setClientId] = useState<number | null>(null);
     const [notes, setNotes] = useState('');
     const [expiresAt, setExpiresAt] = useState('');
     const [items, setItems] = useState<QuoteItemCreate[]>([]);
     const [catalog, setCatalog] = useState<CatalogItem[]>([]);
+    const [clients, setClients] = useState<any[]>([]);
     const [catalogSearch, setCatalogSearch] = useState('');
     const [showCatalog, setShowCatalog] = useState(false);
     const [headerDiscount, setHeaderDiscount] = useState(0);
+    const [discountType, setDiscountType] = useState<'amount' | 'percentage'>('amount');
+    const [applyTax, setApplyTax] = useState(true);
+    const [bookingRoom, setBookingRoom] = useState<any>(null);
+    const [services, setServices] = useState<any[]>([]); // To get room rates
 
-    // Load catalog (products + rooms + offices)
+    // Load catalog and clients
     useEffect(() => {
         if (!isOpen) return;
         Promise.all([
             financialService.getProducts(branchId || undefined),
             api.get('/operative/rooms', { params: { branch_id: branchId || undefined } }),
             api.get('/operative/offices', { params: { branch_id: branchId || undefined } }),
-        ]).then(([products, roomsRes, officesRes]) => {
+            financialService.getServices(branchId || undefined),
+            api.get('/operative/clients', { params: { limit: 10000 } }),
+        ]).then(([products, roomsRes, officesRes, servicesData, clientsRes]) => {
             const pItems: CatalogItem[] = (products || []).map((p: any) => ({ id: p.id, name: p.name, price: p.price, type: 'product', extra: p.type }));
-            const rItems: CatalogItem[] = (roomsRes.data || []).map((r: any) => ({ id: r.id, name: r.name, price: r.hourly_rate, type: 'room', extra: `Capacidad: ${r.capacity}` }));
-            const oItems: CatalogItem[] = (officesRes.data || []).map((o: any) => ({ id: o.id, name: o.name, price: o.monthly_rate, type: 'office', extra: `Capacidad: ${o.capacity}` }));
-            setCatalog([...pItems, ...rItems, ...oItems]);
-        }).catch(() => setCatalog([]));
+            const rItems: CatalogItem[] = (roomsRes?.data || []).filter((r: any) => r.is_active).map((r: any) => ({ id: r.id, name: r.name, price: r.hourly_rate, type: 'room', extra: `Capacidad: ${r.capacity}` }));
+            const oItems: CatalogItem[] = (officesRes?.data || []).map((o: any) => ({ id: o.id, name: o.name, price: o.monthly_rate, type: 'office', extra: `Capacidad: ${o.capacity}` }));
+            const sItems: CatalogItem[] = (servicesData || []).filter((s: any) => s.is_active).map((s: any) => ({ id: s.id, name: s.name, price: s.price, type: 'service' }));
+            setCatalog([...pItems, ...rItems, ...oItems, ...sItems]);
+            setServices(servicesData || []);
+            setClients(clientsRes?.data || []);
+        }).catch((err) => {
+            console.error("Error loading catalog:", err);
+            setCatalog([]);
+            setClients([]);
+        });
     }, [isOpen, branchId]);
 
     // Populate form when editing
@@ -253,10 +281,13 @@ const QuoteFormModal: React.FC<{
         if (editingQuote) {
             setTitle(editingQuote.title);
             setLeadId(editingQuote.lead_id || null);
+            setClientId(editingQuote.client_id || null);
             setNotes(editingQuote.notes || '');
             setExpiresAt(editingQuote.expires_at ? editingQuote.expires_at.slice(0, 10) : '');
             setHeaderDiscount(editingQuote.discount);
+            setDiscountType(editingQuote.discount_type || 'amount');
             setBranchId(editingQuote.branch_id);
+            setApplyTax(editingQuote.apply_tax ?? true);
             setItems(editingQuote.items.map(i => ({
                 item_type: i.item_type,
                 item_id: i.item_id,
@@ -265,15 +296,23 @@ const QuoteFormModal: React.FC<{
                 unit_price: i.unit_price,
                 discount: i.discount,
                 subtotal: i.subtotal,
+                start_time: i.start_time,
+                end_time: i.end_time,
             })));
         } else {
             setBranchId(selectedBranchId || (branches.length > 0 ? branches[0].id : 0));
-            setTitle(''); setLeadId(null); setNotes(''); setExpiresAt('');
-            setHeaderDiscount(0); setItems([]);
+            setTitle(''); setLeadId(null); setClientId(null); setNotes(''); setExpiresAt('');
+            setHeaderDiscount(0); setDiscountType('amount'); setApplyTax(true); setItems([]);
         }
     }, [editingQuote, isOpen, selectedBranchId, branches]);
 
     const addCatalogItem = useCallback((ci: CatalogItem) => {
+        if (ci.type === 'room') {
+            setBookingRoom(ci);
+            setShowCatalog(false);
+            return;
+        }
+
         const newItem: QuoteItemCreate = {
             item_type: ci.type,
             item_id: ci.id,
@@ -287,6 +326,24 @@ const QuoteFormModal: React.FC<{
         setShowCatalog(false);
         setCatalogSearch('');
     }, []);
+
+    const handleConfirmBooking = (data: { serviceId: number; startTime: string; endTime: string; qty: number; price: number; serviceName: string }) => {
+        if (!bookingRoom) return;
+
+        setItems(prev => [...prev, {
+            item_type: 'room',
+            item_id: bookingRoom.id,
+            description: `${bookingRoom.name} - ${data.serviceName}`,
+            unit_price: data.price,
+            quantity: data.qty,
+            discount: 0,
+            subtotal: data.price * data.qty,
+            start_time: data.startTime,
+            end_time: data.endTime,
+            service_id: data.serviceId
+        }]);
+        setBookingRoom(null);
+    };
 
     const addCustomItem = () => {
         setItems(prev => [...prev, { item_type: 'custom', item_id: null, description: '', quantity: 1, unit_price: 0, discount: 0, subtotal: 0 }]);
@@ -304,10 +361,10 @@ const QuoteFormModal: React.FC<{
     const removeItem = (idx: number) => setItems(prev => prev.filter((_, i) => i !== idx));
 
     // Computed totals
-    const subtotal = items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
-    const discountTotal = items.reduce((s, i) => s + i.discount, 0) + headerDiscount;
-    const taxable = subtotal - discountTotal;
-    const tax = taxable * TAX_RATE;
+    const itemsNetSubtotal = items.reduce((s, i) => s + Math.max(0, i.quantity * i.unit_price - i.discount), 0);
+    const headerDiscountAmount = discountType === 'percentage' ? itemsNetSubtotal * (headerDiscount / 100.0) : headerDiscount;
+    const taxable = Math.max(0, itemsNetSubtotal - headerDiscountAmount);
+    const tax = applyTax ? (taxable * TAX_RATE) : 0;
     const total = taxable + tax;
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -317,13 +374,16 @@ const QuoteFormModal: React.FC<{
             branch_id: branchId || selectedBranchId || 0,
             title: title.trim(),
             lead_id: leadId,
+            client_id: clientId,
             notes: notes.trim() || null,
             expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
             discount: headerDiscount,
+            discount_type: discountType,
+            apply_tax: applyTax,
             items,
         };
         const result = editingQuote
-            ? await updateQuote(editingQuote.id, { title: payload.title, lead_id: payload.lead_id, notes: payload.notes, expires_at: payload.expires_at, discount: payload.discount, items: payload.items })
+            ? await updateQuote(editingQuote.id, { title: payload.title, lead_id: payload.lead_id, client_id: payload.client_id, notes: payload.notes, expires_at: payload.expires_at, discount: payload.discount, discount_type: payload.discount_type, apply_tax: payload.apply_tax, items: payload.items })
             : await createQuote(payload);
         if (result) onClose();
     };
@@ -333,8 +393,8 @@ const QuoteFormModal: React.FC<{
 
     if (!isOpen) return null;
 
-    const typeIcon = (t: string) => t === 'product' ? <Package size={12} /> : t === 'room' ? <DoorOpen size={12} /> : <Building2 size={12} />;
-    const typeColor = (t: string) => t === 'product' ? 'bg-blue-100 text-blue-600' : t === 'room' ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600';
+    const typeIcon = (t: string) => t === 'product' ? <Package size={12} /> : t === 'room' ? <DoorOpen size={12} /> : t === 'service' ? <Briefcase size={12} /> : <Building2 size={12} />;
+    const typeColor = (t: string) => t === 'product' ? 'bg-blue-100 text-blue-600' : t === 'room' ? 'bg-green-100 text-green-600' : t === 'service' ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-600';
 
     return (
         <div className="fixed inset-0 bg-black/60 z-40 flex items-start justify-center p-4 overflow-y-auto">
@@ -383,17 +443,28 @@ const QuoteFormModal: React.FC<{
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Lead Asociado</label>
-                            <select
-                                value={leadId ?? ''}
-                                onChange={e => setLeadId(e.target.value ? Number(e.target.value) : null)}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            >
-                                <option value="">Sin lead asociado</option>
-                                {uniqueLeads.map(l => (
-                                    <option key={l.id} value={l.id}>{l.name}{l.company ? ` — ${l.company}` : ''}</option>
-                                ))}
-                            </select>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Lead Asociado (Opcional)</label>
+                            <SearchableSelect
+                                value={leadId}
+                                onChange={val => {
+                                    setLeadId(val ? Number(val) : null);
+                                    if (val) setClientId(null);
+                                }}
+                                options={uniqueLeads.map(l => ({ value: l.id, label: `${l.name}${l.company ? ` — ${l.company}` : ''}${l.phone ? ` (${l.phone})` : ''}` }))}
+                                placeholder="Buscar lead..."
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Cliente Asociado (Opcional)</label>
+                            <SearchableSelect
+                                value={clientId}
+                                onChange={val => {
+                                    setClientId(val ? Number(val) : null);
+                                    if (val) setLeadId(null);
+                                }}
+                                options={clients.map((c: any) => ({ value: c.id, label: `${c.name}${c.ci_rif ? ` — ${c.ci_rif}` : ''}${c.phone ? ` (${c.phone})` : ''}` }))}
+                                placeholder="Buscar cliente..."
+                            />
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Válido hasta</label>
@@ -446,9 +517,9 @@ const QuoteFormModal: React.FC<{
                                                         className="w-full text-left px-3 py-2.5 hover:bg-blue-50 flex items-center justify-between group transition-colors border-b border-gray-50">
                                                         <div className="flex items-center gap-2 min-w-0">
                                                             <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium shrink-0 ${typeColor(ci.type)}`}>
-                                                                {typeIcon(ci.type)} {ci.type === 'product' ? 'Prod.' : ci.type === 'room' ? 'Sala' : 'Oficina'}
+                                                                {typeIcon(ci.type)} {ci.type === 'product' ? 'Prod.' : ci.type === 'room' ? 'Sala' : ci.type === 'service' ? 'Servicio' : 'Oficina'}
                                                             </span>
-                                                            <span className="text-sm text-gray-700 truncate font-medium">{ci.name}</span>
+                                                            <span className="text-sm text-gray-700 truncate font-medium" title={ci.name}>{ci.name}</span>
                                                         </div>
                                                         <span className="text-xs text-emerald-600 font-mono shrink-0 ml-2">{fmt(ci.price)}</span>
                                                     </button>
@@ -487,18 +558,28 @@ const QuoteFormModal: React.FC<{
                                                         placeholder="Descripción..." className="w-full text-sm border-0 focus:ring-1 focus:ring-blue-400 rounded px-2 py-1 outline-none" />
                                                 </td>
                                                 <td className="px-2 py-1.5">
-                                                    <input type="number" min="1" value={item.quantity} onChange={e => updateItem(idx, 'quantity', Number(e.target.value))}
-                                                        className="w-full text-center text-sm border border-gray-200 rounded px-1 py-1 focus:ring-1 focus:ring-blue-400 outline-none" />
+                                                    <input type="number" min="0" step="0.1"
+                                                        disabled={item.item_type === 'room'}
+                                                        value={item.quantity}
+                                                        onChange={e => updateItem(idx, 'quantity', Number(e.target.value))}
+                                                        className={`w-full text-center text-sm border border-gray-200 rounded px-1 py-1 focus:ring-1 focus:ring-blue-400 outline-none ${item.item_type === 'room' ? 'bg-gray-50 text-gray-400 font-bold' : ''}`} />
                                                 </td>
                                                 <td className="px-2 py-1.5">
-                                                    <input type="number" min="0" step="0.01" value={item.unit_price} onChange={e => updateItem(idx, 'unit_price', Number(e.target.value))}
+                                                    <input type="number" min="0" step="any" value={item.unit_price} onChange={e => updateItem(idx, 'unit_price', Number(e.target.value))}
                                                         className="w-full text-right text-sm border border-gray-200 rounded px-2 py-1 focus:ring-1 focus:ring-blue-400 outline-none font-mono" />
                                                 </td>
                                                 <td className="px-2 py-1.5">
                                                     <input type="number" min="0" step="0.01" value={item.discount} onChange={e => updateItem(idx, 'discount', Number(e.target.value))}
                                                         className="w-full text-right text-sm border border-gray-200 rounded px-2 py-1 focus:ring-1 focus:ring-blue-400 outline-none font-mono" />
                                                 </td>
-                                                <td className="px-3 py-1.5 text-right font-semibold font-mono text-gray-700">{fmt(item.subtotal)}</td>
+                                                <td className="px-3 py-1.5 text-right font-semibold font-mono text-gray-700">
+                                                    {fmt(item.subtotal)}
+                                                    {item.item_type === 'room' && item.start_time && (
+                                                        <div className="text-[9px] text-indigo-400 font-normal uppercase tracking-tight mt-0.5">
+                                                            {new Date(item.start_time).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}
+                                                        </div>
+                                                    )}
+                                                </td>
                                                 <td className="px-2 py-1.5">
                                                     <button type="button" onClick={() => removeItem(idx)} className="text-gray-300 hover:text-red-500 transition-colors">
                                                         <Trash2 size={14} />
@@ -516,16 +597,33 @@ const QuoteFormModal: React.FC<{
                             <div className="flex justify-end mt-4">
                                 <div className="bg-gray-50 rounded-xl p-4 w-64 space-y-1 text-sm">
                                     <div className="flex justify-between text-gray-600">
-                                        <span>Subtotal</span><span className="font-mono">{fmt(subtotal)}</span>
+                                        <span>Subtotal</span><span className="font-mono">{fmt(itemsNetSubtotal)}</span>
                                     </div>
                                     <div className="flex items-center justify-between gap-2">
                                         <span className="text-gray-600">Desc. adicional</span>
-                                        <input type="number" min="0" step="0.01" value={headerDiscount}
-                                            onChange={e => setHeaderDiscount(Number(e.target.value))}
-                                            className="w-24 text-right text-sm border border-gray-200 rounded px-2 py-0.5 font-mono outline-none focus:ring-1 focus:ring-blue-400" />
+                                        <div className="flex items-center bg-white border border-gray-200 rounded overflow-hidden shrink-0">
+                                            <select
+                                                value={discountType}
+                                                onChange={(e) => setDiscountType(e.target.value as 'amount' | 'percentage')}
+                                                className="text-xs bg-gray-50 pl-1 pr-1 border-none outline-none text-gray-500 cursor-pointer h-full py-1"
+                                            >
+                                                <option value="amount">€</option>
+                                                <option value="percentage">%</option>
+                                            </select>
+                                            <input type="number" min="0" step="0.01" value={headerDiscount}
+                                                onChange={e => setHeaderDiscount(Number(e.target.value))}
+                                                className="w-16 text-right text-sm px-1 py-0.5 font-mono outline-none focus:ring-1 focus:ring-blue-400 bg-transparent border-l border-gray-200" />
+                                        </div>
                                     </div>
                                     <div className="flex justify-between text-gray-600">
-                                        <span>IVA (16%)</span><span className="font-mono">{fmt(tax)}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span>IVA (16%)</span>
+                                            <label className="relative inline-flex items-center cursor-pointer scale-75">
+                                                <input type="checkbox" checked={applyTax} onChange={e => setApplyTax(e.target.checked)} className="sr-only peer" />
+                                                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                            </label>
+                                        </div>
+                                        <span className={`font-mono ${!applyTax ? 'text-gray-300 line-through' : ''}`}>{fmt(tax)}</span>
                                     </div>
                                     <div className="flex justify-between font-bold text-base text-slate-800 border-t border-gray-200 pt-2">
                                         <span>TOTAL</span><span className="font-mono text-blue-700">{fmt(total)}</span>
@@ -547,6 +645,15 @@ const QuoteFormModal: React.FC<{
                         </button>
                     </div>
                 </form>
+
+                {bookingRoom && (
+                    <RoomBookingPicker
+                        room={bookingRoom}
+                        services={services}
+                        onConfirm={handleConfirmBooking}
+                        onCancel={() => setBookingRoom(null)}
+                    />
+                )}
             </div>
         </div>
     );
@@ -560,7 +667,7 @@ const ConvertModal: React.FC<{ quote: Quote; onClose: () => void }> = ({ quote, 
     const [clients, setClients] = useState<any[]>([]);
 
     useEffect(() => {
-        api.get('/operative/clients').then(r => setClients(r.data || [])).catch(() => { });
+        api.get('/operative/clients', { params: { limit: 10000 } }).then(r => setClients(r.data || [])).catch(() => { });
     }, []);
 
     const handleConvert = async () => {
@@ -590,13 +697,12 @@ const ConvertModal: React.FC<{ quote: Quote; onClose: () => void }> = ({ quote, 
 
                 <div className="mb-5">
                     <label className="block text-xs font-semibold text-gray-500 uppercase mb-2">Asignar a Cliente</label>
-                    <select value={clientId ?? ''} onChange={e => setClientId(e.target.value ? Number(e.target.value) : null)}
-                        className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-purple-500 outline-none">
-                        <option value="">Crear nuevo cliente automáticamente</option>
-                        {clients.map((c: any) => (
-                            <option key={c.id} value={c.id}>{c.name}{c.email ? ` — ${c.email}` : ''}</option>
-                        ))}
-                    </select>
+                    <SearchableSelect
+                        value={clientId}
+                        onChange={val => setClientId(val ? Number(val) : null)}
+                        options={clients.map((c: any) => ({ value: c.id, label: `${c.name}${c.email ? ` — ${c.email}` : ''}` }))}
+                        placeholder="Crear nuevo cliente automáticamente"
+                    />
                     <p className="text-xs text-gray-400 mt-1.5">Déjalo en blanco para aprovechar los datos del lead actual.</p>
                 </div>
 
@@ -620,6 +726,8 @@ const ConvertModal: React.FC<{ quote: Quote; onClose: () => void }> = ({ quote, 
 export const PresupuestosPage: React.FC = () => {
     const { quotes, fetchQuotes, deleteQuote, updateQuote, isLoading, lastConvertedOrderId, clearConvertedOrder } = useQuotesStore();
     const { fetchKanbanData } = useCRMStore();
+    const { selectedBranchId } = useAuthStore();
+    const { branches } = useConfigurationStore();
 
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
@@ -629,9 +737,13 @@ export const PresupuestosPage: React.FC = () => {
     const [statusFilter, setStatusFilter] = useState<string>('all');
 
     useEffect(() => {
-        fetchQuotes(0); // Pass 0 for global visibility across all branches
-        fetchKanbanData(0);
-    }, [fetchQuotes, fetchKanbanData]);
+        const timer = setTimeout(() => {
+            fetchQuotes(selectedBranchId ?? 0, search || undefined, statusFilter === 'all' ? undefined : statusFilter);
+        }, 300);
+
+        fetchKanbanData(selectedBranchId ?? 0);
+        return () => clearTimeout(timer);
+    }, [selectedBranchId, search, statusFilter, fetchQuotes, fetchKanbanData]);
 
     // Dismiss conversion success after 5s
     useEffect(() => {
@@ -642,11 +754,27 @@ export const PresupuestosPage: React.FC = () => {
     }, [lastConvertedOrderId, clearConvertedOrder]);
 
     const filtered = quotes.filter(q => {
-        const matchSearch = !search || q.title.toLowerCase().includes(search.toLowerCase()) ||
-            (q.lead?.name || '').toLowerCase().includes(search.toLowerCase()) ||
-            (q.client?.name || '').toLowerCase().includes(search.toLowerCase());
+        // Match branch
+        const matchBranch = !selectedBranchId || selectedBranchId === 0 || q.branch_id === selectedBranchId;
+
+        // Match search across ID, title, lead, client, and branch name
+        const cleanSearch = search.trim().toLowerCase();
+        const cleanDigits = cleanSearch.replace(/[^0-9]/g, '');
+        const idFormatted = String(q.id).padStart(4, '0');
+        const idRaw = String(q.id);
+        const branchName = (branches.find(b => b.id === q.branch_id)?.name || '').toLowerCase();
+
+        const matchSearch = !cleanSearch ||
+            q.title.toLowerCase().includes(cleanSearch) ||
+            (q.lead?.name || '').toLowerCase().includes(cleanSearch) ||
+            (q.client?.name || '').toLowerCase().includes(cleanSearch) ||
+            branchName.includes(cleanSearch) ||
+            idFormatted.includes(cleanSearch) ||
+            `#${idFormatted}`.includes(cleanSearch) ||
+            (cleanDigits !== '' && (idRaw === cleanDigits || idFormatted.includes(cleanDigits)));
+
         const matchStatus = statusFilter === 'all' || q.status === statusFilter;
-        return matchSearch && matchStatus;
+        return matchBranch && matchSearch && matchStatus;
     });
 
     const handleEdit = (q: Quote) => { setEditingQuote(q); setIsFormOpen(true); };
@@ -686,7 +814,7 @@ export const PresupuestosPage: React.FC = () => {
                 <div className="relative flex-1 min-w-48 max-w-sm">
                     <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
                     <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-                        placeholder="Buscar por título o cliente..."
+                        placeholder="Buscar por #ID, título, cliente o prospecto..."
                         className="pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-purple-400 outline-none" />
                 </div>
                 <div className="flex gap-1.5">
@@ -720,6 +848,7 @@ export const PresupuestosPage: React.FC = () => {
                                 <tr>
                                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">#</th>
                                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Título</th>
+                                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden sm:table-cell">Sede</th>
                                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell">Lead / Cliente</th>
                                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Estado</th>
                                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Total</th>
@@ -740,8 +869,14 @@ export const PresupuestosPage: React.FC = () => {
                                                     <p className="text-xs text-gray-400 mt-0.5">{q.items.length} ítem{q.items.length !== 1 ? 's' : ''}</p>
                                                 </button>
                                             </td>
+                                            <td className="px-4 py-3 hidden sm:table-cell text-gray-600 font-medium text-xs">
+                                                {branches.find(b => b.id === q.branch_id)?.name || '—'}
+                                            </td>
                                             <td className="px-4 py-3 hidden md:table-cell text-gray-600">
-                                                {q.client?.name || q.lead?.name || <span className="text-gray-300">—</span>}
+                                                <div>{q.client?.name || q.lead?.name || <span className="text-gray-300">—</span>}</div>
+                                                {(q.client?.phone || q.lead?.phone) && (
+                                                    <div className="text-xs text-gray-400 font-mono mt-0.5">{q.client?.phone || q.lead?.phone}</div>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3">
                                                 <div className="flex items-center gap-2">
@@ -765,7 +900,7 @@ export const PresupuestosPage: React.FC = () => {
                                             </td>
                                             <td className="px-4 py-3 text-right font-mono font-semibold text-gray-800">{fmt(q.total)}</td>
                                             <td className="px-4 py-3 text-gray-500 text-xs hidden lg:table-cell">
-                                                {q.expires_at ? new Date(q.expires_at).toLocaleDateString('es-VE') : <span className="text-gray-300">—</span>}
+                                                {q.expires_at ? new Date(q.expires_at).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : <span className="text-gray-300">—</span>}
                                             </td>
                                             <td className="px-4 py-3">
                                                 <div className="flex items-center justify-center gap-1">

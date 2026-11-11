@@ -1,56 +1,87 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from typing import List, Dict, Any
-
-from app import models
-from app.api.deps import get_current_user, get_target_branch_id, get_db
-from app.crud import dashboards as crud
+from fastapi import APIRouter, Depends
+from typing import Optional, List
+from app import schemas
+from app.api.deps import get_target_branch_id, get_uow
+from app.uow.unit_of_work import UnitOfWork
+from app.use_cases.financial import DashboardUseCases
 
 router = APIRouter()
 
-@router.get("/kpis", response_model=Dict[str, Any])
-def read_kpis(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+@router.get("/kpis")
+def get_kpis(
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow)
 ):
-    return crud.get_kpis(db=db, branch_id=target_branch_id)
+    use_case = DashboardUseCases(uow)
+    return use_case.get_kpis(target_branch_id)
 
-@router.get("/revenue-trend", response_model=List[Dict[str, Any]])
-def read_revenue_trend(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+@router.get("/revenue-trend")
+def get_revenue_trend(
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow)
 ):
-    return crud.get_revenue_trend(db=db, branch_id=target_branch_id)
+    use_case = DashboardUseCases(uow)
+    return use_case.get_revenue_trend(target_branch_id)
 
-@router.get("/occupancy-stats", response_model=List[Dict[str, Any]])
-def read_occupancy_stats(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+@router.get("/sales-crm")
+def get_sales_crm(
+    period: str = 'monthly',
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow)
 ):
-    return crud.get_occupancy_stats(db=db, branch_id=target_branch_id)
+    use_case = DashboardUseCases(uow)
+    return use_case.get_sales_crm_dashboard(target_branch_id, period)
 
-@router.get("/revenue-by-category", response_model=List[Dict[str, Any]])
-def read_revenue_by_category(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-    target_branch_id: int = Depends(get_target_branch_id)
+@router.get("/revenue-by-category")
+def get_revenue_by_category(
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow)
 ):
-    return crud.get_revenue_by_category(db=db, branch_id=target_branch_id)
+    use_case = DashboardUseCases(uow)
+    return use_case.get_revenue_by_category(target_branch_id)
 
-@router.get("/crm-funnel", response_model=List[Dict[str, Any]])
-def read_crm_funnel(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+@router.get("/occupancy-stats")
+def get_occupancy_stats(
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow)
 ):
-    # El funnel suele ser global para gerencia
-    return crud.get_crm_funnel(db=db)
+    use_case = DashboardUseCases(uow)
+    return use_case.get_occupancy_stats(target_branch_id)
 
-@router.get("/sede-performance", response_model=List[Dict[str, Any]])
-def read_sede_performance(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+@router.get("/crm-funnel")
+def get_crm_funnel(
+    uow: UnitOfWork = Depends(get_uow)
 ):
-    return crud.get_sede_performance(db=db)
+    use_case = DashboardUseCases(uow)
+    return use_case.get_crm_funnel()
+
+@router.get("/sede-performance")
+def get_sede_performance(
+    uow: UnitOfWork = Depends(get_uow)
+):
+    use_case = DashboardUseCases(uow)
+    return use_case.get_sede_performance()
+@router.get("/operator")
+def get_operator_dashboard(
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow)
+):
+    use_case = DashboardUseCases(uow)
+    return use_case.get_operator_dashboard(target_branch_id)
+
+@router.get("/dashboard-stats")
+def get_dashboard_stats(
+    target_branch_id: int = Depends(get_target_branch_id),
+    uow: UnitOfWork = Depends(get_uow)
+):
+    use_case = DashboardUseCases(uow)
+    return use_case.get_dashboard_stats(target_branch_id)
+
+@router.get("/management", response_model=schemas.financial.ManagementDashboardResponse)
+def get_management_dashboard(
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    uow: UnitOfWork = Depends(get_uow)
+):
+    use_case = DashboardUseCases(uow)
+    return use_case.get_management_dashboard(month, year)

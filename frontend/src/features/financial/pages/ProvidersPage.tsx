@@ -1,23 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { useProvidersStore } from '../hooks/useProvidersStore';
-import { Plus, Edit2, Trash2, Search } from 'lucide-react';
+import { useAuthStore } from '../../auth/hooks/useAuthStore';
+import { Plus, Edit2, Trash2, Search, FileText } from 'lucide-react';
 import type { CreateProviderDTO } from '../services/providers.service';
+import ProviderStatementModal from '../components/ProviderStatementModal';
 
 const ProvidersPage: React.FC = () => {
     const { providers, isLoading, fetchProviders, createProvider, updateProvider, deleteProvider } = useProvidersStore();
+    const { user } = useAuthStore();
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
+    
+    // Estado de cuenta
+    const [statementProviderId, setStatementProviderId] = useState<number | null>(null);
+    const [statementProviderName, setStatementProviderName] = useState<string>('');
 
-    const [formData, setFormData] = useState<CreateProviderDTO>({
-        name: '',
-        nit_ruc: '',
-        email: '',
-        phone: '',
-        contact_name: '',
-        payment_info: '',
-        notes: '',
-    });
+    const privilegedRoles = ["Super Administrador", "Gerente", "Coordinador"];
+    const canSeeStatement = user?.is_superuser || (user?.role && privilegedRoles.includes(user.role.name));
 
     useEffect(() => {
         fetchProviders();
@@ -32,10 +32,20 @@ const ProvidersPage: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            const cleanedData = {
+                ...formData,
+                email: formData.email?.trim() === '' ? null : formData.email,
+                phone: formData.phone?.trim() === '' ? null : formData.phone,
+                nit_ruc: formData.nit_ruc?.trim() === '' ? null : formData.nit_ruc,
+                contact_name: formData.contact_name?.trim() === '' ? null : formData.contact_name,
+                payment_info: formData.payment_info?.trim() === '' ? null : formData.payment_info,
+                notes: formData.notes?.trim() === '' ? null : formData.notes,
+            };
+
             if (editingId) {
-                await updateProvider(editingId, formData);
+                await updateProvider(editingId, cleanedData);
             } else {
-                await createProvider(formData);
+                await createProvider(cleanedData);
             }
             closeModal();
         } catch (error) {
@@ -64,6 +74,11 @@ const ProvidersPage: React.FC = () => {
         }
     };
 
+    const handleOpenStatement = (provider: any) => {
+        setStatementProviderId(provider.id);
+        setStatementProviderName(provider.name);
+    };
+
     const closeModal = () => {
         setIsModalOpen(false);
         setEditingId(null);
@@ -71,6 +86,16 @@ const ProvidersPage: React.FC = () => {
             name: '', nit_ruc: '', email: '', phone: '', contact_name: '', payment_info: '', notes: ''
         });
     };
+
+    const [formData, setFormData] = useState<CreateProviderDTO>({
+        name: '',
+        nit_ruc: '',
+        email: '',
+        phone: '',
+        contact_name: '',
+        payment_info: '',
+        notes: '',
+    });
 
     return (
         <div className="p-6">
@@ -146,6 +171,15 @@ const ProvidersPage: React.FC = () => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            {canSeeStatement && (
+                                                <button
+                                                    onClick={() => handleOpenStatement(provider)}
+                                                    className="text-amber-600 hover:text-amber-900 mr-4"
+                                                    title="Estado de Cuenta"
+                                                >
+                                                    <FileText className="w-5 h-5" />
+                                                </button>
+                                            )}
                                             <button
                                                 onClick={() => handleEdit(provider)}
                                                 className="text-blue-600 hover:text-blue-900 mr-4"
@@ -175,6 +209,15 @@ const ProvidersPage: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* Modal Estado de Cuenta */}
+            {statementProviderId && (
+                <ProviderStatementModal
+                    providerId={statementProviderId}
+                    providerName={statementProviderName}
+                    onClose={() => setStatementProviderId(null)}
+                />
+            )}
 
             {/* Modal Crear/Editar */}
             {isModalOpen && (

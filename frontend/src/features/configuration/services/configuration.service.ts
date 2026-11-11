@@ -25,6 +25,28 @@ export const configurationService = {
         await api.delete(`${BASE}/users/${userId}`);
     },
 
+    // ── CLIENT PORTAL USERS ───────────────
+    getClientUsers: async () => {
+        const res = await api.get<User[]>(`${BASE}/client-users`);
+        return res.data;
+    },
+    createClientUser: async (data: { email: string; password: string; role_name?: string; branch_id?: number }) => {
+        const params = new URLSearchParams();
+        params.append('email', data.email);
+        params.append('password', data.password);
+        if (data.role_name) params.append('role_name', data.role_name);
+        if (data.branch_id) params.append('branch_id', String(data.branch_id));
+        const res = await api.post<User>(`${BASE}/client-users?${params.toString()}`);
+        return res.data;
+    },
+    updateClientUser: async (userId: number, data: UserConfigUpdate) => {
+        const res = await api.put<User>(`${BASE}/client-users/${userId}`, data);
+        return res.data;
+    },
+    deleteClientUser: async (userId: number) => {
+        await api.delete(`${BASE}/client-users/${userId}`);
+    },
+
     getRoles: async () => {
         const res = await api.get<Role[]>(`${BASE}/roles`);
         return res.data;

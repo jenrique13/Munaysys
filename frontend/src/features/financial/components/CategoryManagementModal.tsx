@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useFinancialStore } from '../hooks/useFinancialStore';
 import { X, Plus, Trash2, Edit2, Check, AlertCircle } from 'lucide-react';
-import type { CashCategory } from '../types';
+// import type { CashCategory } from '../types';
 
 interface CategoryManagementModalProps {
     isOpen: boolean;

@@ -2,8 +2,16 @@ import api from '../../../services/api';
 import type { Quote, QuoteCreate, QuoteUpdate } from '../types';
 
 export const quotesService = {
-    getAll: async (branchId?: number, skip = 0, limit = 100): Promise<Quote[]> => {
-        const response = await api.get<Quote[]>('/crm/quotes/', { params: { branch_id: branchId, skip, limit } });
+    getAll: async (branchId?: number, search?: string, status?: string, skip = 0, limit = 1000): Promise<Quote[]> => {
+        const response = await api.get<Quote[]>('/crm/quotes/', {
+            params: {
+                branch_id: branchId,
+                search: search || undefined,
+                status: status && status !== 'all' ? status : undefined,
+                skip,
+                limit
+            }
+        });
         return response.data;
     },
 

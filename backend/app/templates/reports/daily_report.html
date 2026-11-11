@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="UTF-8">
     <style>
@@ -7,105 +8,170 @@
             size: A4;
             margin: 1cm;
         }
+
         body {
             font-family: Helvetica, Arial, sans-serif;
-            color: #0F172A;
-            font-size: 11pt;
-            line-height: 1.3;
+            color: #1E293B;
+            font-size: 9pt;
+            line-height: 1.4;
+            margin: 0;
+            padding: 0;
         }
-        .header-table {
-            width: 100%;
+
+        .header-container {
             border-bottom: 2px solid #4F46E5;
+            padding-bottom: 10px;
             margin-bottom: 15px;
-            padding-bottom: 5px;
         }
-        .header-left h1 {
+
+        .header-title {
             color: #4F46E5;
             font-size: 18pt;
             margin: 0;
             font-weight: bold;
         }
-        .header-left p {
+
+        .header-subtitle {
             color: #64748B;
             font-size: 10pt;
-            margin: 2px 0;
+            margin: 2px 0 0 0;
         }
-        .header-right {
-            text-align: right;
-            vertical-align: bottom;
-            font-size: 9pt;
-            color: #475569;
-        }
-        .summary-grid {
+
+        /* Summary Boxes - USING TABLE FOR ROBUSTNESS */
+        .summary-table {
             width: 100%;
-            margin-bottom: 15px;
+            border-collapse: separate;
+            border-spacing: 8px 0;
+            margin-bottom: 20px;
         }
+
         .summary-card {
             background-color: #F8FAFC;
             border: 1px solid #E2E8F0;
-            padding: 8px 12px;
+            padding: 10px;
             border-radius: 6px;
+            text-align: center;
+            height: 55px;
         }
+
+        .summary-card.highlight {
+            background-color: #EEF2FF;
+            border-color: #C7D2FE;
+        }
+
         .summary-label {
-            font-size: 9pt;
+            font-size: 7pt;
             color: #64748B;
             font-weight: bold;
             display: block;
             text-transform: uppercase;
+            margin-bottom: 3px;
+            letter-spacing: 0.5px;
         }
-        .section-title {
-            font-size: 12pt;
+
+        .summary-value {
+            font-size: 13pt;
             font-weight: bold;
             color: #1E293B;
-            margin-top: 15px;
-            margin-bottom: 8px;
-            border-left: 4px solid #4F46E5;
-            padding-left: 8px;
-            background-color: #F1F5F9;
-            padding-top: 4px;
-            padding-bottom: 4px;
+            display: block;
         }
-        table {
+
+        .summary-bs {
+            font-size: 7.5pt;
+            color: #6366f1;
+            font-weight: bold;
+            margin-top: 1px;
+        }
+
+        .section-title {
+            font-size: 10.5pt;
+            font-weight: bold;
+            color: white;
+            background-color: #1E293B;
+            padding: 5px 10px;
+            margin: 20px 0 8px 0;
+            border-radius: 3px;
+        }
+
+        table.data-table {
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 15px;
         }
-        th {
-            background-color: #4F46E5;
-            color: white;
+
+        table.data-table th {
+            background-color: #F1F5F9;
+            color: #475569;
             text-align: left;
-            padding: 6px 8px;
-            font-size: 10pt;
+            padding: 4px 5px;
+            font-size: 8pt;
+            border-bottom: 2px solid #E2E8F0;
+            font-weight: bold;
+            text-transform: uppercase;
         }
-        td {
-            border-bottom: 1px solid #E2E8F0;
-            padding: 6px 8px;
-            font-size: 10pt;
+
+        table.data-table td {
+            border-bottom: 1px solid #F1F5F9;
+            padding: 2px 5px;
             vertical-align: middle;
         }
+
         tr.even {
-            background-color: #F8FAFC;
+            background-color: #FCFDFF;
         }
-        .amount-cell {
+
+        tr.total-row {
+            background-color: #F8FAFC;
+            font-weight: bold;
+        }
+
+        .text-right {
             text-align: right;
         }
-        .currency-usd {
-            font-weight: bold;
-            display: block;
+
+        .text-center {
+            text-align: center;
         }
-        .currency-bs {
-            font-size: 8.5pt;
-            color: #64748B;
-            display: block;
-            margin-top: 1px;
+
+        .text-emerald-600 {
+            color: #059669;
         }
-        .total-row {
-            background-color: #E2E8F0;
+
+        .font-bold {
             font-weight: bold;
         }
+
+        .badge {
+            font-size: 7pt;
+            padding: 1px 5px;
+            border-radius: 8px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .badge-paid {
+            background-color: #DCFCE7;
+            color: #166534;
+        }
+
+        .badge-pending {
+            background-color: #FEF9C3;
+            color: #854D0E;
+        }
+
+        .badge-partial {
+            background-color: #DBEAFE;
+            color: #1E40AF;
+        }
+
+        .badge-cancelled {
+            background-color: #FEE2E2;
+            color: #991B1B;
+        }
+
         .footer {
-            margin-top: 20px;
-            font-size: 8pt;
+            margin-top: 30px;
+            font-size: 7pt;
             color: #94A3B8;
             text-align: center;
             border-top: 1px solid #E2E8F0;
@@ -113,138 +179,356 @@
         }
     </style>
 </head>
-<body>
-    <table class="header-table">
-        <tr>
-            <td class="header-left" style="border:none;">
-                <h1>Munaysys</h1>
-                <p>Reporte Diario de Ventas - {{ date }}</p>
-            </td>
-            <td class="header-right" style="border:none;">
-                <strong>Sede:</strong> {{ branch_name }}<br>
-                <strong>Tasa BCV:</strong> USD {{ usd_rate }} | EUR {{ eur_rate }}
-            </td>
-        </tr>
-    </table>
 
-    <table class="summary-grid" style="border:none;">
+<body>
+    <div class="header-container">
+        <table style="width:100%; border:none;">
+            <tr>
+                <td style="padding: 0;">
+                    <h1 class="header-title">Reporte Diario de Ventas</h1>
+                    <p class="header-subtitle">{{ date }} • {{ branch_name }}</p>
+                </td>
+                <td style="padding: 0; text-align: right; vertical-align: top;">
+                    <div style="font-size: 8pt; color: #64748B;">
+                        <strong>Tasa BCV USD:</strong> {{ "{:,.2f}".format(usd_rate) }} Bs<br>
+                        <strong>Tasa BCVEUR:</strong> {{ "{:,.2f}".format(eur_rate) }} Bs
+                    </div>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- SECCION 1: TOTALES (TABLA REAL PARA ALINEACION) -->
+    <table class="summary-table">
         <tr>
-            <td width="33%" style="border:none; padding: 0 5px 0 0;">
-                <div class="summary-card">
-                    <span class="summary-label">Total Ventas</span>
-                    <span class="currency-usd">${{ "{:,.2f}".format(totals.total) }}</span>
-                    <span class="currency-bs">Bs {{ "{:,.2f}".format(totals.total * usd_rate) }}</span>
+            <td width="33.3%">
+                <div class="summary-card highlight">
+                    <span class="summary-label">Total Ventas (Hoy)</span>
+                    <span class="summary-value">€{{ "{:,.2f}".format(totals.sales) }}</span>
+                    <span class="summary-bs">Bs {{ "{:,.2f}".format(totals.sales * eur_rate) }}</span>
                 </div>
             </td>
-            <td width="33%" style="border:none; padding: 0 5px;">
+            <td width="33.3%">
                 <div class="summary-card">
                     <span class="summary-label">Total Ingresos</span>
-                    <span class="currency-usd">${{ "{:,.2f}".format(totals.income) }}</span>
-                    <span class="currency-bs">Bs {{ "{:,.2f}".format(totals.income * usd_rate) }}</span>
+                    <span class="summary-value">
+                        {% if totals.income_usd > 0 %}${{ "{:,.2f}".format(totals.income_usd) }}{% endif %}
+                        {% if totals.income_eur > 0 %}{% if totals.income_usd > 0 %} + {% endif %}€{{
+                        "{:,.2f}".format(totals.income_eur) }}{% endif %}
+                        {% if totals.income_usd == 0 and totals.income_eur == 0 %}$0.00{% endif %}
+                    </span>
+                    <span class="summary-bs">Bs {{ "{:,.2f}".format((totals.income_usd * usd_rate) + (totals.income_eur
+                        * eur_rate)) }}</span>
                 </div>
             </td>
-            <td width="33%" style="border:none; padding: 0 0 0 5px;">
+            <td width="33.3%">
                 <div class="summary-card">
-                    <span class="summary-label">Deuda Pendiente</span>
-                    <span class="currency-usd">${{ "{:,.2f}".format(totals.total_debt) }}</span>
-                    <span class="currency-bs">Bs {{ "{:,.2f}".format(totals.total_debt * usd_rate) }}</span>
+                    <span class="summary-label">Deuda Nueva Hoy</span>
+                    <span class="summary-value" style="color: #B91C1C;">€{{ "{:,.2f}".format(totals.pending_today)
+                        }}</span>
+                    <span class="summary-bs">Bs {{ "{:,.2f}".format(totals.pending_today * eur_rate) }}</span>
+                </div>
+            </td>
+        </tr>
+        <tr>
+            <td width="33.3%">
+                <div class="summary-card">
+                    <span class="summary-label">Total Subtotal</span>
+                    <span class="summary-value">€{{ "{:,.2f}".format(totals.items_subtotal) }}</span>
+                </div>
+            </td>
+            <td width="33.3%">
+                <div class="summary-card">
+                    <span class="summary-label">Total Descuentos</span>
+                    <span class="summary-value" style="color: #4F46E5;">-€{{ "{:,.2f}".format(totals.total_discount)
+                        }}</span>
+                </div>
+            </td>
+            <td width="33.3%">
+                <div class="summary-card">
+                    <span class="summary-label">Total Impuesto (IVA)</span>
+                    <span class="summary-value">€{{ "{:,.2f}".format(totals.total_tax) }}</span>
                 </div>
             </td>
         </tr>
     </table>
 
-    <table class="summary-grid" style="border:none; margin-top: 5px;">
-        <tr>
-            <td style="border:none; padding: 0 5px 0 0;"><div class="summary-card"><span class="summary-label">Espacios</span><strong>${{ "{:,.2f}".format(totals.office) }}</strong></div></td>
-            <td style="border:none; padding: 0 5px;"><div class="summary-card"><span class="summary-label">Salas</span><strong>${{ "{:,.2f}".format(totals.room) }}</strong></div></td>
-            <td style="border:none; padding: 0 5px;"><div class="summary-card"><span class="summary-label">Productos</span><strong>${{ "{:,.2f}".format(totals.product) }}</strong></div></td>
-            <td style="border:none; padding: 0 5px;"><div class="summary-card"><span class="summary-label">Servicios</span><strong>${{ "{:,.2f}".format(totals.service) }}</strong></div></td>
-            <td style="border:none; padding: 0 0 0 5px;"><div class="summary-card"><span class="summary-label">Paquetes</span><strong>${{ "{:,.2f}".format(totals.package) }}</strong></div></td>
-        </tr>
-    </table>
 
-    <div class="section-title">1. Ingresos por Método de Pago</div>
-    <table>
+    <div class="section-title">Ventas por Cliente</div>
+    <table class="data-table">
         <thead>
             <tr>
-                <th>Método de Pago</th>
-                <th class="amount-cell">Monto</th>
+                <th width="60%">Cliente</th>
+                <th width="20%" class="text-right">Monto (€)</th>
+                <th width="20%" class="text-right">Monto (Bs)</th>
             </tr>
         </thead>
         <tbody>
-            {% for method, amount in by_payment.items() %}
+            {% for client, amount in sales_by_client.items() %}
             <tr class="{{ loop.cycle('odd', 'even') }}">
-                <td>{{ method }}</td>
-                <td class="amount-cell">
-                    <span class="currency-usd">${{ "{:,.2f}".format(amount) }}</span>
-                    <span class="currency-bs">Bs {{ "{:,.2f}".format(amount * usd_rate) }}</span>
+                <td class="font-bold">{{ client }}</td>
+                <td class="text-right">€{{ "{:,.2f}".format(amount) }}</td>
+                <td class="text-right">Bs {{ "{:,.2f}".format(amount * eur_rate) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td>Total Ventas por Cliente</td>
+                <td class="text-right">€{{ "{:,.2f}".format(totals.sales_by_client) }}</td>
+                <td class="text-right">Bs {{ "{:,.2f}".format(totals.sales_by_client * eur_rate) }}</td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <div class="section-title">Detalle de Ingresos</div>
+    <table class="data-table" style="font-size: 7.5pt;">
+        <thead>
+            <tr>
+                <th width="25%">Cliente / Concepto</th>
+                <th width="12%">Método</th>
+                <th width="10%" class="text-center">Tasa</th>
+                <th width="15%" class="text-right">Monto Divisa</th>
+                <th width="18%" class="text-right">Monto Bs</th>
+                <th width="20%">Referencia</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in income_details %}
+            <tr class="{{ loop.cycle('odd', 'even') }}">
+                <td>{{ r.client_name }} <br><span style="font-size:6.5pt; color:#64748B;">{{ r.description }}</span>
                 </td>
+                <td>{{ r.method }}</td>
+                <td class="text-center">{{ "{:,.2f}".format(r.rate) }}</td>
+                <td class="text-right font-bold">{% if r.currency == 'EUR' %}€{% else %}${% endif %}{{
+                    "{:,.2f}".format(r.amount) }}</td>
+                <td class="text-right">Bs {{ "{:,.2f}".format(r.bs_amount) }}</td>
+                <td>{{ r.reference }}</td>
             </tr>
             {% endfor %}
             <tr class="total-row">
-                <td>TOTAL INGRESOS</td>
-                <td class="amount-cell">
-                    <span class="currency-usd">${{ "{:,.2f}".format(totals.income) }}</span>
-                    <span class="currency-bs">Bs {{ "{:,.2f}".format(totals.income * usd_rate) }}</span>
+                <td colspan="3">Total Ingresos</td>
+                <td class="text-right">
+                    {% if totals.income_usd > 0 %}${{ "{:,.2f}".format(totals.income_usd) }}{% endif %}
+                    {% if totals.income_eur > 0 %}<br>€{{ "{:,.2f}".format(totals.income_eur) }}{% endif %}
                 </td>
+                <td class="text-right">Bs {{ "{:,.2f}".format(totals.income_bs) }}</td>
+                <td></td>
             </tr>
-        </tbody>
+            </tfoot>
     </table>
 
-    <div class="section-title">2. Listado de Órdenes del Día</div>
-    <table>
+    <div class="section-title">Ingresos</div>
+    <table class="data-table">
         <thead>
             <tr>
-                <th width="10%">#</th>
-                <th width="40%">Cliente</th>
-                <th width="20%">Estado</th>
-                <th width="15%" class="amount-cell">Total</th>
-                <th width="15%" class="amount-cell">Pagado</th>
+                <th width="40%">Método de Pago</th>
+                <th width="30%" class="text-right">Monto Divisa</th>
+                <th width="30%" class="text-right">Monto Bs</th>
             </tr>
         </thead>
         <tbody>
-            {% for o in orders %}
+            {% for method, m_totals in income_by_method.items() %}
+            <tr class="{{ loop.cycle('odd', 'even') }}">
+                <td class="font-bold">{{ method }}</td>
+                <td class="text-right">
+                    {% if m_totals.usd > 0 %}${{ "{:,.2f}".format(m_totals.usd) }}{% endif %}
+                    {% if m_totals.eur > 0 %}{% if m_totals.usd > 0 %}<br>{% endif %}€{{ "{:,.2f}".format(m_totals.eur)
+                    }}{% endif %}
+                    {% if m_totals.usd == 0 and m_totals.eur == 0 %}$0.00{% endif %}
+                </td>
+                <td class="text-right">Bs {{ "{:,.2f}".format(m_totals.bs) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="section-title">Órdenes del Día</div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th width="8%">#</th>
+                <th width="32%">Cliente</th>
+                <th width="12%">Estado</th>
+                <th width="12%" class="text-right">Subtotal</th>
+                <th width="10%" class="text-right">Desc.</th>
+                <th width="10%" class="text-right">IVA</th>
+                <th width="16%" class="text-right">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for o in orders_list %}
             <tr class="{{ loop.cycle('odd', 'even') }}">
                 <td>{{ o.id }}</td>
                 <td>{{ o.client_name }}</td>
-                <td>{{ o.status }}</td>
-                <td class="amount-cell">${{ "{:,.2f}".format(o.total) }}</td>
-                <td class="amount-cell">${{ "{:,.2f}".format(o.paid) }}</td>
+                <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
+                <td class="text-right">€{{ "{:,.2f}".format(o.subtotal) }}</td>
+                <td class="text-right" style="color: #991B1B;">{% if o.discount > 0 %}-{% endif %}€{{
+                    "{:,.2f}".format(o.discount) }}</td>
+                <td class="text-right">€{{ "{:,.2f}".format(o.tax) }}</td>
+                <td class="text-right font-bold">€{{ "{:,.2f}".format(o.total) }}</td>
             </tr>
             {% endfor %}
         </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td colspan="3">Total Órdenes del Día</td>
+                <td class="text-right">€{{ "{:,.2f}".format(totals.items_subtotal) }}</td>
+                <td class="text-right" style="color: #B91C1C;">-€{{ "{:,.2f}".format(totals.total_discount) }}</td>
+                <td class="text-right">€{{ "{:,.2f}".format(totals.total_tax) }}</td>
+                <td class="text-right">€{{ "{:,.2f}".format(totals.orders_facturado) }}</td>
+            </tr>
+        </tfoot>
     </table>
 
-    <div class="section-title">3. Estado de Cuentas (Clientes con Deuda)</div>
-    <table>
+    <div class="section-title">Detalle de Órdenes del Día</div>
+    <table class="data-table" style="width: 100%; table-layout: fixed;">
         <thead>
             <tr>
-                <th>Cliente</th>
-                <th class="amount-cell">Saldo Pendiente</th>
+                <th width="20%">Descripción / Cliente</th>
+                <th width="7%" class="text-center">Cant</th>
+                <th width="13%" class="text-right">P. Unit.</th>
+                <th width="13%" class="text-right">Subtotal</th>
+                <th width="10%" class="text-center">Desc / Impuesto</th>
+                <th width="10%" class="text-right">Total</th>
+                <th></th>
+                <th width="20%" class="text-center">Hora</th>
             </tr>
         </thead>
         <tbody>
-            {% for client in debts %}
+            {% for item in items_detail_list %}
             <tr class="{{ loop.cycle('odd', 'even') }}">
-                <td>{{ client.name }}</td>
-                <td class="amount-cell">
-                    <span class="currency-usd">${{ "{:,.2f}".format(client.balance) }}</span>
-                    <span class="currency-bs">Bs {{ "{:,.2f}".format(client.balance * usd_rate) }}</span>
+                <td style="word-wrap: break-word; overflow: hidden;">
+                    <div style="font-weight: bold;">{{ item.description }}</div>
+                    <div style="font-size: 5.5pt; color: #64748B;">{{ item.client_name }} (Ord #{{ item.order_id }})
+                    </div>
+                </td>
+                <td class="text-center">{{ item.quantity }}</td>
+                <td class="text-right">€{{ "{:,.2f}".format(item.unit_price) }}</td>
+                <td class="text-right">€{{ "{:,.2f}".format(item.unit_price * item.quantity) }}</td>
+                <td style="word-wrap: break-word; overflow: hidden;">
+                    <div style="color: #991B1B; font-weight: bold;">{% if item.discount > 0 %}-{% endif %}€{{
+                        "{:,.2f}".format(item.discount) }}</div>
+                    <div style="font-size: 5.5pt; color: #64748B;">€{{ "{:,.2f}".format(item.tax) }}</div>
+                </td>
+                <!-- <td class="text-right">€{{ "{:,.2f}".format(item.tax) }}</td> -->
+                <td class="text-right ">€{{ "{:,.2f}".format(item.total) }}</td>
+                <td></td>
+                <td class="text-left">
+                    <center>
+                        <div style="font-size: 8.5pt; color: #000000;">{{ item.time.split(' - ')[0] }}</div>
+                    </center>
                 </td>
             </tr>
             {% endfor %}
-            <tr class="total-row">
-                <td>TOTAL DEUDA</td>
-                <td class="amount-cell">
-                    <span class="currency-usd">${{ "{:,.2f}".format(totals.total_debt) }}</span>
-                    <span class="currency-bs">Bs {{ "{:,.2f}".format(totals.total_debt * usd_rate) }}</span>
-                </td>
-            </tr>
         </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td colspan="4">Total Detalle de Órdenes del Día</td>
+                <td class="text-right">€{{ "{:,.2f}".format(totals.total_tax) }}</td>
+                <td class="text-right">€{{ "{:,.2f}".format(totals.orders_facturado) }}</td>
+                <td></td>
+            </tr>
+        </tfoot>
     </table>
 
+    {% if consumables_usage %}
+    <div class="section-title">Uso de Consumibles del Día</div>
+    <table class="data-table" style="font-size: 7.5pt;">
+        <thead>
+            <tr>
+                <th width="40%">Consumible</th>
+                <th width="15%" class="text-center">Cantidad</th>
+                <th width="25%">Motivo</th>
+                <th width="20%">Registrado por</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in consumables_usage %}
+            <tr class="{{ loop.cycle('odd', 'even') }}">
+                <td class="font-bold">{{ u.name }}</td>
+                <td class="text-center">{{ u.quantity }} {{ u.unit }}</td>
+                <td>{{ u.reason or '-' }}</td>
+                <td>{{ u.user or '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <div class="section-title">Listado de Deudas Pendientes</div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th width="60%">Cliente</th>
+                <th width="20%" class="text-right">Saldo Deudor (€)</th>
+                <th width="20%" class="text-right">Saldo Deudor (Bs)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if global_debts %}
+            {% for d in global_debts %}
+            <tr class="{{ loop.cycle('odd', 'even') }}">
+                <td class="font-bold">{{ d.client_name }}</td>
+                <td class="text-right" style="color: #DC2626;">€{{ "{:,.2f}".format(d.balance) }}</td>
+                <td class="text-right">Bs {{ "{:,.2f}".format(d.balance * eur_rate) }}</td>
+            </tr>
+            {% endfor %}
+            {% else %}
+            <tr>
+                <td colspan="3" class="text-center" style="color: #94A3B8; padding: 25px;">
+                    No se encontraron deudas pendientes registradas en esta sede/periodo.
+                </td>
+            </tr>
+            {% endif %}
+        </tbody>
+        {% if global_debts %}
+        <tfoot>
+            <tr class="total-row">
+                <td>Total Deudas Pendientes</td>
+                <td class="text-right" style="color: #DC2626;">€{{ "{:,.2f}".format(totals.debt_usd) }}</td>
+                <td class="text-right">Bs {{ "{:,.2f}".format(totals.debt_bs) }}</td>
+            </tr>
+        </tfoot>
+        {% endif %}
+    </table>
+
+    {% if audit_logs %}
+    <div class="section-title">Bitácora de Modificaciones y Eliminaciones</div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th width="10%">Hora</th>
+                <th width="15%">Acción</th>
+                <th width="20%">Usuario</th>
+                <th width="20%">Orden / Cliente</th>
+                <th width="35%">Detalle / Razón</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in audit_logs %}
+            <tr class="{{ loop.cycle('odd', 'even') }}">
+                <td>{{ log.time }}</td>
+                <td>
+                    <span class="badge {% if log.action == 'DELETED' %}badge-cancelled{% else %}badge-partial{% endif %}">
+                        {{ log.action }}
+                    </span>
+                </td>
+                <td style="font-size: 7.5pt;">{{ log.user }}</td>
+                <td>
+                    <div class="font-bold">{{ log.order_info }}</div>
+                    <div style="font-size: 6pt; color: #64748B;">{{ log.client_name }}</div>
+                </td>
+                <td style="font-size: 7.5pt;">{{ log.message }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
     <div class="footer">
-        Generado por Munaysys el {{ now }} | Página 1
+        Este documento es un reporte diario generado por {{ branch_name }} el {{ now }}.<br>
     </div>
 </body>
+
 </html>

@@ -5,29 +5,60 @@ import { useProvidersStore } from '../hooks/useProvidersStore';
 import { useSystemStore } from '../../system/hooks/useSystemStore';
 import { formatCurrency, formatBs } from '../../../utils/format';
 
-import { Wallet, Plus, Search, Tag, X, Download } from 'lucide-react';
+import { Wallet, Plus, Search, Tag, X, Download, AlertCircle } from 'lucide-react';
 
 // REMOVED static CATEGORIES array
 
 const NewExpenseModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     const { selectedBranchId } = useAuthStore();
-    const { createExpense, isLoading, error, cashCategories, paymentMethods, fetchPaymentMethods } = useFinancialStore();
+    const { createExpense, isLoading, error, cashCategories, fetchCashCategories, paymentMethods, fetchPaymentMethods } = useFinancialStore();
     const { providers, fetchProviders } = useProvidersStore();
     const { bcvRateUsd, bcvRateEur, fetchBcvRates } = useSystemStore();
 
     useEffect(() => {
         if (paymentMethods.length === 0) fetchPaymentMethods();
+        if (cashCategories.length === 0) fetchCashCategories();
         if (!bcvRateUsd) fetchBcvRates();
         fetchProviders();
-    }, [fetchProviders, fetchPaymentMethods, fetchBcvRates, paymentMethods.length, bcvRateUsd]);
+    }, [fetchProviders, fetchPaymentMethods, fetchCashCategories, fetchBcvRates, paymentMethods.length, cashCategories.length, bcvRateUsd]);
 
     const [amount, setAmount] = useState<number>(0);
     const expenseCategories = cashCategories.filter(c => c.type === 'expense' && c.is_active);
-    const [category, setCategory] = useState<string>(expenseCategories[0]?.name || "Otros Gastos Operativos");
+    const [category, setCategory] = useState<string>("");
+
+    useEffect(() => {
+        if (expenseCategories.length > 0) {
+            const exists = expenseCategories.some(c => c.name === category);
+            if (!exists) {
+                setCategory(expenseCategories[0].name);
+            }
+        }
+    }, [expenseCategories, category]);
     const [description, setDescription] = useState('');
     const [providerId, setProviderId] = useState<number | ''>('');
     const [method, setMethod] = useState<string>(paymentMethods.find(m => m.is_active)?.name || "Efectivo");
     const [refCurrency, setRefCurrency] = useState<'usd' | 'eur'>('usd');
+    const [customRate, setCustomRate] = useState<number>(0);
+    const [applyIGTF, setApplyIGTF] = useState(false);
+
+    // Update customRate when refCurrency or BCV rates change
+    useEffect(() => {
+        const rate = refCurrency === 'usd' ? bcvRateUsd : bcvRateEur;
+        setCustomRate(rate || 0);
+    }, [refCurrency, bcvRateUsd, bcvRateEur]);
+
+    const isIGTFMethod = [
+        'EFECTIVO $',
+        'ZELLE',
+        'BANESCO (Panama)',
+        'PAY PALL',
+        'BANK OF AMERICAN'
+    ].includes(method);
+
+    const subtotal = amount / 1.16;
+    const tax = amount - subtotal;
+    const igtf_amount = (applyIGTF && isIGTFMethod) ? amount * 0.03 : 0;
+    const totalWithIGTF = amount + igtf_amount;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -35,14 +66,17 @@ const NewExpenseModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
         const ok = await createExpense({
             branch_id: selectedBranchId ?? 0,
-            amount,
+            amount: totalWithIGTF,
             category,
             description,
             provider_id: providerId ? Number(providerId) : undefined,
             provider: providerId ? providers.find(p => p.id === Number(providerId))?.name : undefined,
             payment_method: method,
-            exchange_rate: (refCurrency === 'usd' ? bcvRateUsd : bcvRateEur) ?? undefined,
-            exchange_currency: refCurrency
+            exchange_rate: customRate,
+            exchange_currency: refCurrency,
+            subtotal: subtotal,
+            tax: tax,
+            igtf_amount: igtf_amount
         });
         if (ok) onClose();
     };
@@ -50,74 +84,203 @@ const NewExpenseModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm z-10 overflow-hidden">
-                <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
-                    <h2 className="font-bold text-gray-800 text-lg flex items-center gap-2">
-                        <Wallet size={18} /> Registrar Gasto
-                    </h2>
-                    <button onClick={onClose} className="text-gray-400 hover:bg-gray-100 p-1 rounded-full"><X size={18} /></button>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl z-10 flex flex-col max-h-[95vh] sm:max-h-[90vh] overflow-hidden">
+                <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50 shrink-0">
+                    <div>
+                        <h2 className="font-bold text-gray-800 text-lg flex items-center gap-2">
+                            <Wallet size={18} /> Registrar Gasto
+                        </h2>
+                        <p className="text-gray-500 text-xs mt-0.5 font-medium">Registro de pagos de servicios, nómina y otros gastos operativos.</p>
+                    </div>
+                    <button type="button" onClick={onClose} className="text-gray-400 hover:bg-gray-100 p-1 rounded-full">
+                        <X size={18} />
+                    </button>
                 </div>
-                <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
-                        <select value={category} onChange={e => setCategory(e.target.value)} required
-                            className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500">
-                            {expenseCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                            {expenseCategories.length === 0 && <option value="Otros Gastos Operativos">Otros Gastos Operativos (Default)</option>}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Monto ($)</label>
-                        <input type="number" step="0.01" min="0" required value={amount} onChange={e => setAmount(parseFloat(e.target.value) || 0)}
-                            className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
-                    </div>
 
-                    {/* Rate Selection */}
-                    <div className="bg-gray-50 border border-gray-200 p-3 rounded-lg">
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Tasa de Cambio a Aplicar</label>
-                        <div className="flex gap-2">
-                            <button type="button" onClick={() => setRefCurrency('usd')} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${refCurrency === 'usd' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}>Dólar (USD)</button>
-                            <button type="button" onClick={() => setRefCurrency('eur')} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${refCurrency === 'eur' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}>Euro (EUR)</button>
+                {error && (
+                    <div className="mx-6 mt-4 p-3 bg-red-50 text-red-700 rounded-lg flex items-center gap-2 border border-red-100 text-sm shrink-0">
+                        <AlertCircle size={16} />
+                        <span className="font-bold">{error}</span>
+                    </div>
+                )}
+
+                <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden min-h-0 flex-1">
+                    <div className="flex flex-col md:flex-row overflow-y-auto min-h-0">
+                        
+                        {/* Columna Izquierda: Resumen de Cálculos */}
+                        <div className="w-full md:w-1/2 p-5 lg:p-6 bg-slate-50/50 border-r border-gray-100 flex flex-col">
+                            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">Resumen de Cálculos</h3>
+
+                            <div className="bg-white shadow-sm text-blue-900 text-xs p-5 rounded-xl border border-blue-100/60 flex-1 flex flex-col justify-between">
+                                <div className="space-y-4 flex-1">
+                                    <div className="flex justify-between mb-2">
+                                        <span className="font-medium text-slate-600">Base Imponible:</span>
+                                        <div className="text-right">
+                                            <span className="font-bold text-gray-700 block">{formatCurrency(subtotal)}</span>
+                                            <span className="text-[10px] text-gray-500">{formatBs(subtotal, customRate)}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-between mb-2">
+                                        <span className="font-medium text-slate-600">IVA Proporcional (16%):</span>
+                                        <div className="text-right">
+                                            <span className="font-bold text-gray-700 block">{formatCurrency(tax)}</span>
+                                            <span className="text-[10px] text-gray-500">{formatBs(tax, customRate)}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-between border-t border-blue-100/60 pt-3">
+                                        <span className="font-medium text-slate-600">Monto Gasto (Neto):</span>
+                                        <div className="text-right">
+                                            <span className="font-extrabold text-indigo-600 block">{formatCurrency(amount)}</span>
+                                            <span className="text-[10px] text-indigo-400 font-medium">{formatBs(amount, customRate)}</span>
+                                        </div>
+                                    </div>
+
+                                    {applyIGTF && isIGTFMethod && (
+                                        <div className="flex justify-between text-orange-600 font-bold mt-4 pt-4 border-t border-orange-200 border-dashed">
+                                            <span>+ IGTF (3% de {formatCurrency(amount)}):</span>
+                                            <div className="text-right">
+                                                <span className="block">{formatCurrency(igtf_amount)}</span>
+                                                <span className="text-[10px] opacity-80">{formatBs(igtf_amount, customRate)}</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="flex justify-between border-t border-blue-200/60 mt-4 pt-4 text-sm bg-blue-50/50 -mx-5 px-5 pb-3 rounded-b-xl border-dashed shrink-0">
+                                    <span className="font-bold mt-1 text-slate-700 uppercase tracking-tight">TOTAL A PAGAR:</span>
+                                    <div className="text-right">
+                                        <span className="font-black text-blue-900 text-xl block">
+                                            {formatCurrency(totalWithIGTF)}
+                                        </span>
+                                        <span className="text-xs font-bold text-blue-700">
+                                            {formatBs(totalWithIGTF, customRate)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div className="mt-3 flex justify-between items-center px-1">
-                            <span className="text-sm text-gray-600 font-medium">Equivalente a pagar:</span>
-                            <div className="text-right">
-                                <span className="text-lg font-bold text-gray-900 block">
-                                    {formatBs(amount, refCurrency === 'usd' ? bcvRateUsd : bcvRateEur)}
-                                </span>
-                                <span className="text-[10px] text-gray-400 font-bold tracking-wide">
-                                    TASA: {refCurrency === 'usd' ? bcvRateUsd : bcvRateEur} BS/{refCurrency.toUpperCase()}
-                                </span>
+
+                        {/* Columna Derecha: Formulario */}
+                        <div className="w-full md:w-1/2 p-5 lg:p-6 space-y-4">
+                            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Detalles del Gasto</h3>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Monto del Gasto (€)</label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    required
+                                    value={amount === 0 ? '' : amount}
+                                    onChange={e => setAmount(parseFloat(e.target.value) || 0)}
+                                    className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-lg font-bold text-indigo-700 bg-indigo-50/30"
+                                    placeholder="0.00"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                                <select
+                                    value={category}
+                                    onChange={e => setCategory(e.target.value)}
+                                    required
+                                    className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+                                >
+                                    {expenseCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                    {expenseCategories.length === 0 && <option value="Otros Gastos Operativos">Otros Gastos Operativos (Default)</option>}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Entidad / Proveedor</label>
+                                <select
+                                    required
+                                    value={providerId}
+                                    onChange={e => setProviderId(e.target.value === '' ? '' : Number(e.target.value))}
+                                    className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+                                >
+                                    <option value="" disabled>Seleccione proveedor...</option>
+                                    {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Cuenta / Método de Pago</label>
+                                <select
+                                    required
+                                    value={method}
+                                    onChange={e => setMethod(e.target.value)}
+                                    className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+                                >
+                                    {paymentMethods.filter(m => m.is_active).map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                                    {paymentMethods.filter(m => m.is_active).length === 0 && <option value="Efectivo">Efectivo (Default)</option>}
+                                </select>
+                            </div>
+
+                            <div className="flex items-start gap-2 p-3 bg-orange-50/50 border border-orange-100 rounded-lg">
+                                <input
+                                    type="checkbox"
+                                    id="apply-igtf-expense"
+                                    checked={applyIGTF && isIGTFMethod}
+                                    disabled={!isIGTFMethod}
+                                    onChange={e => setApplyIGTF(e.target.checked)}
+                                    className="mt-0.5 w-4 h-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                />
+                                <label htmlFor="apply-igtf-expense" className={`text-sm font-bold cursor-pointer select-none leading-snug ${!isIGTFMethod ? 'text-gray-400' : 'text-orange-800'}`}>
+                                    Aplicar IGTF (3%)
+                                    {!isIGTFMethod && <span className="block text-[10px] font-normal text-gray-400 italic mt-0.5">Solo aplica para divisas / métodos internacionales</span>}
+                                </label>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Descripción / Notas</label>
+                                <input
+                                    value={description}
+                                    onChange={e => setDescription(e.target.value)}
+                                    placeholder="Ej. Pago de servicio eléctrico..."
+                                    className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                                />
+                            </div>
+
+                            <div className="bg-gray-50 border border-gray-200 p-4 rounded-xl">
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2.5">Tasa de Cambio Manual</label>
+                                <div className="flex gap-2 mb-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setRefCurrency('usd')}
+                                        className={`flex-1 py-1.5 rounded-md text-xs font-bold transition ${refCurrency === 'usd' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}
+                                    >
+                                        Dólar (USD)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setRefCurrency('eur')}
+                                        className={`flex-1 py-1.5 rounded-md text-xs font-bold transition ${refCurrency === 'eur' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}
+                                    >
+                                        Euro (EUR)
+                                    </button>
+                                </div>
+
+                                <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-bold">BS</span>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={customRate}
+                                        onChange={e => setCustomRate(parseFloat(e.target.value) || 0)}
+                                        className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm font-bold text-indigo-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Descripción / Notas</label>
-                        <input value={description} onChange={e => setDescription(e.target.value)} placeholder="Ej. Pago de servicio eléctrico..."
-                            className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Entidad / Proveedor</label>
-                        <select required value={providerId} onChange={e => setProviderId(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500">
-                            <option value="" disabled>Seleccione proveedor...</option>
-                            {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Cuenta/Método de Pago</label>
-                        <select required value={method} onChange={e => setMethod(e.target.value)}
-                            className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500">
-                            {paymentMethods.filter(m => m.is_active).map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
-                            {paymentMethods.filter(m => m.is_active).length === 0 && <option value="Efectivo">Efectivo (Default)</option>}
-                        </select>
-                    </div>
-                    <div className="flex justify-end gap-3 pt-4 border-t">
-                        {error && <p className="text-[10px] text-red-500 flex-1 self-center font-bold">{error}</p>}
-                        <button type="button" onClick={onClose} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">Cancelar</button>
-                        <button disabled={isLoading || amount <= 0} type="submit" className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
-                            {isLoading ? 'Procesando...' : 'Registrar Gasto'}
+                    <div className="px-6 py-4 border-t bg-white shrink-0 flex justify-end gap-3 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)] z-10">
+                        <button type="button" onClick={onClose} className="px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancelar</button>
+                        <button disabled={isLoading || amount <= 0} type="submit" className="px-6 py-2.5 text-sm font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm">
+                            {isLoading ? 'Procesando...' : 'Confirmar y Registrar Gasto'}
                         </button>
                     </div>
                 </form>

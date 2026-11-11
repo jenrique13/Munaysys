@@ -4,6 +4,7 @@ import type { User, UserConfigUpdate, Branch, BranchCreate, BranchUpdate, Role, 
 
 interface ConfigurationState {
     users: User[];
+    clientUsers: User[];
     branches: Branch[];
     roles: Role[];
     isLoading: boolean;
@@ -13,6 +14,11 @@ interface ConfigurationState {
     updateUser: (userId: number, data: UserConfigUpdate) => Promise<boolean>;
     createUser: (data: any) => Promise<boolean>;
     deleteUser: (userId: number) => Promise<boolean>;
+
+    fetchClientUsers: () => Promise<void>;
+    createClientUser: (data: { email: string; password: string; role_name?: string; branch_id?: number }) => Promise<boolean>;
+    updateClientUser: (userId: number, data: UserConfigUpdate) => Promise<boolean>;
+    deleteClientUser: (userId: number) => Promise<boolean>;
 
     fetchRoles: () => Promise<void>;
     createRole: (data: RoleCreate) => Promise<boolean>;
@@ -27,6 +33,7 @@ interface ConfigurationState {
 
 export const useConfigurationStore = create<ConfigurationState>((set, get) => ({
     users: [],
+    clientUsers: [],
     branches: [],
     roles: [],
     isLoading: false,
@@ -63,6 +70,41 @@ export const useConfigurationStore = create<ConfigurationState>((set, get) => ({
         try {
             await configurationService.deleteUser(userId);
             await get().fetchUsers();
+            return true;
+        } catch (e: any) { set({ error: e.message, isLoading: false }); return false; }
+    },
+
+    fetchClientUsers: async () => {
+        set({ isLoading: true, error: null });
+        try {
+            const clientUsers = await configurationService.getClientUsers();
+            set({ clientUsers, isLoading: false });
+        } catch (e: any) { set({ error: e.message, isLoading: false }); }
+    },
+
+    createClientUser: async (data) => {
+        set({ isLoading: true, error: null });
+        try {
+            await configurationService.createClientUser(data);
+            await get().fetchClientUsers();
+            return true;
+        } catch (e: any) { set({ error: e.response?.data?.detail || e.message, isLoading: false }); return false; }
+    },
+
+    updateClientUser: async (userId, data) => {
+        set({ isLoading: true, error: null });
+        try {
+            await configurationService.updateClientUser(userId, data);
+            await get().fetchClientUsers();
+            return true;
+        } catch (e: any) { set({ error: e.message, isLoading: false }); return false; }
+    },
+
+    deleteClientUser: async (userId) => {
+        set({ isLoading: true, error: null });
+        try {
+            await configurationService.deleteClientUser(userId);
+            await get().fetchClientUsers();
             return true;
         } catch (e: any) { set({ error: e.message, isLoading: false }); return false; }
     },

@@ -28,6 +28,14 @@ const FINANCIAL_SUB_MODULES = [
     { id: 'financial_billing', label: 'Estado de Cuenta', slug: 'billing' },
 ];
 
+const OPERATIVE_SUB_MODULES = [
+    { id: 'operative_clients', label: 'Clientes', slug: 'clients' },
+    { id: 'operative_espacios', label: 'Espacios', slug: 'espacios' },
+    { id: 'operative_rooms', label: 'Salas', slug: 'rooms' },
+    { id: 'operative_bookings', label: 'Reservas', slug: 'bookings' },
+    { id: 'operative_memberships', label: 'Membresías', slug: 'memberships' },
+];
+
 const RoleModal: React.FC<{ role?: Role | null, onClose: () => void }> = ({ role, onClose }) => {
     const { createRole, updateRole, isLoading, error, clearError } = useConfigurationStore();
     const [name, setName] = useState(role?.name || '');
@@ -40,13 +48,19 @@ const RoleModal: React.FC<{ role?: Role | null, onClose: () => void }> = ({ role
         const newVal = !permissions[mod];
         setPermissions(prev => {
             const updated = { ...prev, [mod]: newVal };
-            // If turning on main financial, turn on all sub-modules
+            // If turning on main modules, turn on all sub-modules
             if (mod === 'financial' && newVal) {
                 FINANCIAL_SUB_MODULES.forEach(sub => { updated[sub.id] = true; });
             }
-            // If turning off main financial, turn off all sub-modules
+            if (mod === 'operative' && newVal) {
+                OPERATIVE_SUB_MODULES.forEach(sub => { updated[sub.id] = true; });
+            }
+            // If turning off main modules, turn off all sub-modules
             if (mod === 'financial' && !newVal) {
                 FINANCIAL_SUB_MODULES.forEach(sub => { updated[sub.id] = false; });
+            }
+            if (mod === 'operative' && !newVal) {
+                OPERATIVE_SUB_MODULES.forEach(sub => { updated[sub.id] = false; });
             }
             return updated;
         });
@@ -130,6 +144,24 @@ const RoleModal: React.FC<{ role?: Role | null, onClose: () => void }> = ({ role
                                     {mod.id === 'financial' && (
                                         <div className="pl-4 pr-1 py-1 grid grid-cols-2 gap-2 animate-in fade-in slide-in-from-top-1">
                                             {FINANCIAL_SUB_MODULES.map(sub => (
+                                                <div
+                                                    key={sub.id}
+                                                    onClick={(e) => { e.stopPropagation(); handleSubToggle(sub.id); }}
+                                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${permissions[sub.id] ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-gray-100 text-gray-400 opacity-60'}`}
+                                                >
+                                                    <div className={`w-3 h-3 rounded-sm border flex items-center justify-center transition-colors ${permissions[sub.id] ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-gray-300'}`}>
+                                                        {permissions[sub.id] && <Check size={8} className="text-white" />}
+                                                    </div>
+                                                    <span className="text-[10px] font-bold">{sub.label}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Sub-modules for Operative */}
+                                    {mod.id === 'operative' && (
+                                        <div className="pl-4 pr-1 py-1 grid grid-cols-2 gap-2 animate-in fade-in slide-in-from-top-1">
+                                            {OPERATIVE_SUB_MODULES.map(sub => (
                                                 <div
                                                     key={sub.id}
                                                     onClick={(e) => { e.stopPropagation(); handleSubToggle(sub.id); }}

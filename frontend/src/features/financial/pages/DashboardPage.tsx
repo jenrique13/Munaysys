@@ -84,7 +84,16 @@ const DashboardPage: React.FC = () => {
 
     if (!dashboardStats) return <div className="p-10 text-center text-slate-400">No se encontraron datos estadísticos.</div>;
 
-    const { total_sales, total_expenses, net_profit, category_distribution, occupancy_stats } = dashboardStats;
+    const { total_sales_eur, total_sales_usd, total_expenses_eur, total_expenses_usd, category_distribution, occupancy_stats } = dashboardStats;
+
+    const formatCombined = (eur: number, usd: number) => {
+        if (usd === 0) return `€${eur.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+        if (eur === 0) return `$${usd.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+        return `€${eur.toLocaleString(undefined, { minimumFractionDigits: 0 })} + $${usd.toLocaleString(undefined, { minimumFractionDigits: 0 })}`;
+    };
+
+    const profit_eur = total_sales_eur - total_expenses_eur;
+    const profit_usd = total_sales_usd - total_expenses_usd;
 
     return (
         <div className="flex flex-col h-full bg-slate-50/50 overflow-auto">
@@ -109,7 +118,7 @@ const DashboardPage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <StatCard
                         title="Ventas Totales"
-                        value={`$${total_sales.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                        value={formatCombined(total_sales_eur, total_sales_usd)}
                         icon={<DollarSign size={24} />}
                         color="indigo"
                         trend="up"
@@ -117,7 +126,7 @@ const DashboardPage: React.FC = () => {
                     />
                     <StatCard
                         title="Gastos Operativos"
-                        value={`$${total_expenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                        value={formatCombined(total_expenses_eur, total_expenses_usd)}
                         icon={<TrendingDown size={24} />}
                         color="amber"
                         trend="down"
@@ -125,11 +134,11 @@ const DashboardPage: React.FC = () => {
                     />
                     <StatCard
                         title="Utilidad Neta"
-                        value={`$${net_profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                        value={formatCombined(profit_eur, profit_usd)}
                         icon={<TrendingUp size={24} />}
                         color="emerald"
-                        trend={net_profit >= 0 ? 'up' : 'down'}
-                        subvalue={`${((net_profit / (total_sales || 1)) * 100).toFixed(1)}%`}
+                        trend={profit_eur >= 0 ? 'up' : 'down'}
+                        subvalue="Actual"
                     />
                     <StatCard
                         title="Ocupación"
@@ -188,7 +197,7 @@ const DashboardPage: React.FC = () => {
                                     </Pie>
                                     <Tooltip
                                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                        formatter={(value: any) => `$${Number(value).toFixed(2)}`}
+                                        formatter={(value: any) => `€${Number(value).toFixed(2)}`}
                                     />
                                     <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '11px', color: '#64748b', fontWeight: 'bold' }} />
                                 </PieChart>

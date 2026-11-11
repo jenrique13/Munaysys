@@ -526,15 +526,24 @@ const ClientsPage: React.FC = () => {
     const [deleteClient, setDeleteClient] = useState<Client | null>(null);
     const [amenitiesClient, setAmenitiesClient] = useState<Client | null>(null);
 
+    // Initial load of branches
     useEffect(() => { 
-        // We fetch all clients (unified view)
-        fetchClients(undefined); // Explicitly fetch all (unified)
         if (branches.length === 0) fetchBranches();
-    }, [fetchClients, branches.length, fetchBranches]);
+    }, [branches.length, fetchBranches]);
+
+    // Fetch clients when search changes (debounce)
+    useEffect(() => {
+        const delayDebounceFn = setTimeout(() => {
+            fetchClients(undefined, search || undefined); // Explicitly fetch all (unified)
+        }, 500);
+
+        return () => clearTimeout(delayDebounceFn);
+    }, [search, fetchClients]);
 
     const filtered = clients.filter(c =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
-        (c.email ?? '').toLowerCase().includes(search.toLowerCase())
+        (c.email ?? '').toLowerCase().includes(search.toLowerCase()) ||
+        (c.ci_rif ?? '').toLowerCase().includes(search.toLowerCase())
     );
 
     return (

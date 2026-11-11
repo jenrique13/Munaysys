@@ -1,157 +1,221 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-
+from app.api.deps import get_uow
+from app.uow.unit_of_work import UnitOfWork
+from app.schemas.auth import User as UserOut, UserUpdate, RoleResponse as RoleOut, RoleCreate, RoleUpdate
+from app.schemas.user import BranchResponse as BranchOut, BranchCreate, BranchUpdate
+from app.core.security import get_password_hash
 from app import models
-from app.database import get_db
-from app.api.deps import get_current_user
-from app.schemas import configuration as schemas
-from app.crud import configuration as crud_config
 
 router = APIRouter()
 
 # --- USERS ---
 
-@router.get("/users", response_model=List[schemas.UserConfigOut])
+@router.get("/users", response_model=List[UserOut])
 def read_users(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    # Only superusers or managers can list users? 
-    # For now, keep it simple but ensure joins if needed by CRUD
-    return crud_config.get_users_config(db, skip=skip, limit=limit)
+    return uow.users.get_multi(skip=skip, limit=limit)
 
-
-@router.get("/users/{user_id}", response_model=schemas.UserConfigOut)
+@router.get("/users/{user_id}", response_model=UserOut)
 def read_user(
     user_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    user = crud_config.get_user_config(db, user_id)
+    user = uow.users.get_with_roles(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     return user
 
-
-@router.put("/users/{user_id}", response_model=schemas.UserConfigOut)
+@router.put("/users/{user_id}", response_model=UserOut)
 def update_user(
     user_id: int,
-    user_in: schemas.UserConfigUpdate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    user_in: UserUpdate,
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    user = crud_config.update_user_config(db, user_id, user_in)
-    if not user:
+    db_user = uow.users.get(user_id)
+    if not db_user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    return user
-
-@router.delete("/users/{user_id}", status_code=204)
-def delete_user(
-    user_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    # Security check: don't delete yourself or other superusers if not super
-    if user_id == current_user.id:
-        raise HTTPException(status_code=400, detail="No puedes eliminarte a ti mismo")
     
-    success = crud_config.delete_user(db, user_id)
-    if not success:
+    update_data = user_in.model_dump(exclude_unset=True)
+    # Hash password if provided
+    if "password" in update_data and update_data["password"]:
+        update_data["password_hash"] = get_password_hash(update_data.pop("password"))
+    else:
+        update_data.pop("password", None)
+
+    uow.users.update(db_user, update_data)
+    uow.commit()
+    uow.refresh(db_user)
+    return db_user
+
+# --- CLIENT PORTAL USERS ---
+
+@router.get("/client-users", response_model=List[UserOut])
+def read_client_users(uow: UnitOfWork = Depends(get_uow)):
+    """Returns all users with Coworker role."""
+    coworker_role = uow.db.query(models.Role).filter(models.Role.name == "Coworker").first()
+    if not coworker_role:
+        return []
+    return (
+        uow.db.query(models.User)
+        .filter(models.User.role_id == coworker_role.id)
+        .all()
+    )
+
+@router.post("/client-users", response_model=UserOut, status_code=201)
+def create_client_user(
+    email: str,
+    password: str,
+    role_name: str = "Coworker",
+    branch_id: Optional[int] = None,
+    uow: UnitOfWork = Depends(get_uow),
+):
+    """Creates a portal user for an existing client."""
+    if uow.users.get_by_email(email):
+        raise HTTPException(status_code=400, detail="Ya existe un usuario con ese correo.")
+    
+    role = uow.db.query(models.Role).filter(models.Role.name == role_name).first()
+    if not role:
+        raise HTTPException(status_code=404, detail=f"Rol '{role_name}' no encontrado.")
+    
+    db_user = models.User(
+        email=email,
+        password_hash=get_password_hash(password),
+        role_id=role.id,
+        branch_id=branch_id,
+        is_active=True,
+        status="active",
+        access_permissions={"client_portal": True}
+    )
+    uow.db.add(db_user)
+    uow.commit()
+    uow.refresh(db_user)
+    return db_user
+
+@router.put("/client-users/{user_id}", response_model=UserOut)
+def update_client_user(
+    user_id: int,
+    user_in: UserUpdate,
+    uow: UnitOfWork = Depends(get_uow),
+):
+    """Update access for a client portal user."""
+    db_user = uow.users.get(user_id)
+    if not db_user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    return None
+
+    update_data = user_in.model_dump(exclude_unset=True)
+    if "password" in update_data and update_data["password"]:
+        update_data["password_hash"] = get_password_hash(update_data.pop("password"))
+    else:
+        update_data.pop("password", None)
+
+    uow.users.update(db_user, update_data)
+    uow.commit()
+    uow.refresh(db_user)
+    return db_user
+
+@router.delete("/client-users/{user_id}")
+def delete_client_user(user_id: int, uow: UnitOfWork = Depends(get_uow)):
+    db_user = uow.users.get(user_id)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    uow.db.delete(db_user)
+    uow.commit()
+    return {"ok": True}
 
 # --- ROLES ---
 
-@router.get("/roles", response_model=List[schemas.RoleOut])
+@router.get("/roles", response_model=List[RoleOut])
 def read_roles(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    return db.query(models.Role).all()
+    return uow.roles.get_multi()
 
-
-@router.post("/roles", response_model=schemas.RoleOut, status_code=201)
+@router.post("/roles", response_model=RoleOut, status_code=201)
 def create_role(
-    role_in: schemas.RoleCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    role_in: RoleCreate,
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    return crud_config.create_role(db, role_in)
+    db_role = uow.roles.create(role_in.model_dump())
+    uow.commit()
+    uow.refresh(db_role)
+    return db_role
 
-
-@router.put("/roles/{role_id}", response_model=schemas.RoleOut)
+@router.put("/roles/{role_id}", response_model=RoleOut)
 def update_role(
     role_id: int,
-    role_in: schemas.RoleUpdate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    role_in: RoleUpdate,
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    role = crud_config.update_role(db, role_id, role_in)
-    if not role:
+    db_role = uow.roles.get(role_id)
+    if not db_role:
         raise HTTPException(status_code=404, detail="Rol no encontrado")
-    return role
+    
+    uow.roles.update(db_role, role_in.model_dump(exclude_unset=True))
+    uow.commit()
+    uow.refresh(db_role)
+    return db_role
 
-
-@router.delete("/roles/{role_id}", status_code=204)
+@router.delete("/roles/{role_id}")
 def delete_role(
     role_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    success = crud_config.delete_role(db, role_id)
-    if not success:
-        # It could be not found OR in use. 
-        # For simplicity return 400 if it exists but can't be deleted, or 404.
-        role = crud_config.get_role(db, role_id)
-        if role:
-            raise HTTPException(status_code=400, detail="El rol está en uso y no puede eliminarse")
+    db_role = uow.roles.get(role_id)
+    if not db_role:
         raise HTTPException(status_code=404, detail="Rol no encontrado")
-    return None
+    
+    # Check if role is assigned to any user
+    user_count = uow.db.query(models.User).filter(models.User.role_id == role_id).count()
+    if user_count > 0:
+        raise HTTPException(status_code=400, detail="No se puede eliminar un rol que tiene usuarios asignados")
+        
+    uow.roles.remove(role_id)
+    uow.commit()
+    return {"ok": True}
 
 # --- BRANCHES (SEDES) ---
 
-@router.get("/branches", response_model=List[schemas.BranchOut])
+@router.get("/branches", response_model=List[BranchOut])
 def read_branches(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    return crud_config.get_branches(db, skip=skip, limit=limit)
+    return uow.branches.get_all_active()
 
-
-@router.get("/branches/{branch_id}", response_model=schemas.BranchOut)
+@router.get("/branches/{branch_id}", response_model=BranchOut)
 def read_branch(
     branch_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    branch = crud_config.get_branch(db, branch_id)
+    branch = uow.branches.get(branch_id)
     if not branch:
         raise HTTPException(status_code=404, detail="Sede no encontrada")
     return branch
 
-
-@router.post("/branches", response_model=schemas.BranchOut, status_code=201)
+@router.post("/branches", response_model=BranchOut, status_code=201)
 def create_branch(
-    branch_in: schemas.BranchCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    branch_in: BranchCreate,
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    return crud_config.create_branch(db, branch_in)
+    db_branch = uow.branches.create(branch_in.model_dump())
+    uow.commit()
+    uow.refresh(db_branch)
+    return db_branch
 
-
-@router.put("/branches/{branch_id}", response_model=schemas.BranchOut)
+@router.put("/branches/{branch_id}", response_model=BranchOut)
 def update_branch(
     branch_id: int,
-    branch_in: schemas.BranchUpdate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    branch_in: BranchUpdate,
+    uow: UnitOfWork = Depends(get_uow),
 ):
-    branch = crud_config.update_branch(db, branch_id, branch_in)
-    if not branch:
+    db_branch = uow.branches.get(branch_id)
+    if not db_branch:
         raise HTTPException(status_code=404, detail="Sede no encontrada")
-    return branch
+    
+    uow.branches.update(db_branch, branch_in.model_dump(exclude_unset=True))
+    uow.commit()
+    uow.refresh(db_branch)
+    return db_branch

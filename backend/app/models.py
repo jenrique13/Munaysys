@@ -1,5 +1,7 @@
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, JSON, DateTime, func, Float, Date
 from sqlalchemy.orm import relationship
+from typing import Optional, List
+from datetime import datetime
 from app.database import Base
 
 class Branch(Base):
@@ -122,6 +124,50 @@ class Client(Base):
     lead = relationship("Lead")
     memberships = relationship("Membership", back_populates="client")
 
+    @property
+    def active_membership_obj(self):
+        """Returns the current active membership based on status and dates."""
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
+        for m in self.memberships:
+            if m.status == "active":
+                # Ensure start_date/end_date are compared correctly
+                # SQLAlchemy's DateTime(timezone=True) usually returns aware datetimes
+                if m.start_date <= now and (not m.end_date or m.end_date >= now):
+                    return m
+        return None
+
+    @property
+    def has_active_membership(self) -> bool:
+        return self.active_membership_obj is not None
+
+    @property
+    def active_membership_name(self) -> Optional[str]:
+        m = self.active_membership_obj
+        return m.plan_name if m else None
+
+class SpaceCategory(Base):
+    __tablename__ = "space_categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    name = Column(String, nullable=False)
+    description = Column(String)
+    is_active = Column(Boolean, default=True)
+
+    branch = relationship("Branch")
+
+class RoomType(Base):
+    __tablename__ = "room_types"
+
+    id = Column(Integer, primary_key=True, index=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    name = Column(String, nullable=False)
+    description = Column(String)
+    is_active = Column(Boolean, default=True)
+
+    branch = relationship("Branch")
+
 class Office(Base):
     __tablename__ = "offices"
 
@@ -168,7 +214,10 @@ class Membership(Base):
     hours_included = Column(Float, default=0.0)  # 0 = unlimited
     hours_used = Column(Float, default=0.0)
     price = Column(Float, default=0.0)
+    billing_address = Column(String, nullable=True)
     status = Column(String, default="active")  # active, expired, cancelled
+    authorized_persons_json = Column(JSON, default=[]) # e.g. [{"name": "...", "last_name": "...", "document": "..."}]
+    custom_contract_html = Column(String, nullable=True) # Per-membership custom contract text
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     client = relationship("Client", back_populates="memberships")
@@ -188,6 +237,31 @@ class ContractTemplate(Base):
 
     branch = relationship("Branch")
 
+
+class AmenityTemplate(Base):
+    __tablename__ = "amenity_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    space_type = Column(String, nullable=False) # "office" or "room"
+    category_name = Column(String, nullable=False) # e.g. "privada", "sala_reuniones"
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True) # null = global
+    is_active = Column(Boolean, default=True)
+
+    branch = relationship("Branch")
+    items = relationship("AmenityTemplateItem", back_populates="template", cascade="all, delete-orphan")
+
+class AmenityTemplateItem(Base):
+    __tablename__ = "amenity_template_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    template_id = Column(Integer, ForeignKey("amenity_templates.id"), nullable=False)
+    service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
+    quantity = Column(Float, default=1.0)
+
+    template = relationship("AmenityTemplate", back_populates="items")
+    service = relationship("Service")
+
 class Amenity(Base):
     __tablename__ = "amenities"
 
@@ -197,14 +271,17 @@ class Amenity(Base):
     space_id = Column(Integer, nullable=True)   # ID of the office/room
     space_type = Column(String, nullable=True)  # "office" or "room"
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
-    quantity = Column(Integer, default=1)
+    membership_id = Column(Integer, ForeignKey("memberships.id"), nullable=True)
+    quantity = Column(Float, default=1.0)
     available = Column(Boolean, default=True)
     unit = Column(String, default="unidad")  # unidad, hora, día, mes
     price = Column(Float, default=0.0)
+    service_id = Column(Integer, ForeignKey("services.id"), nullable=True)
     category = Column(String, nullable=True) # parking, printing, hours, desk
     description = Column(String, nullable=True)
     is_recurring = Column(Boolean, default=False)
     monthly_quota = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
 
     branch = relationship("Branch")
     client = relationship("Client")
@@ -237,6 +314,8 @@ class Booking(Base):
     total_cost = Column(Float, default=0.0)
     orden_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
     notes = Column(String)
+    service_id = Column(Integer, ForeignKey("services.id"), nullable=True)
+    reminded_15m = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     room = relationship("Room", back_populates="bookings")
@@ -253,6 +332,7 @@ class Product(Base):
     description = Column(String)
     price = Column(Float, default=0.0)
     stock = Column(Integer, default=0)
+    type = Column(String, default="physical")  # physical, service
     is_active = Column(Boolean, default=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -268,6 +348,7 @@ class Service(Base):
     price = Column(Float, default=0.0)
     is_active = Column(Boolean, default=True)
     is_amenity = Column(Boolean, default=False)
+    is_room_rate = Column(Boolean, default=False)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -341,11 +422,13 @@ class Orden(Base):
     discount_type = Column(String, default="amount")  # amount | percentage
     tax = Column(Float, default=0.0)  # 16% IVA
     total = Column(Float, default=0.0)
+    apply_tax = Column(Boolean, default=True)
+    igtf_amount = Column(Float, default=0.0)
     status = Column(String, default="pending")  # pending, partial, paid, cancelled
 
     client = relationship("Client")
     branch = relationship("Branch")
-    details = relationship("Pedido", back_populates="orden", cascade="all, delete")
+    details = relationship("Pedido", back_populates="orden", cascade="all, delete, delete-orphan")
     receipts = relationship("Receipt", back_populates="orden")
 
 
@@ -356,12 +439,16 @@ class Pedido(Base):
     orden_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
     item_type = Column(String, nullable=False)  # product, package, amenity, room
     item_id = Column(Integer, nullable=False)
-    quantity = Column(Integer, default=1)
+    quantity = Column(Float, default=1.0)
+    amenity_id = Column(Integer, ForeignKey("amenities.id"), nullable=True)
+    amenity_quantity = Column(Float, default=0.0) # Quantity covered by amenities
     unit_price = Column(Float, default=0.0)
     discount = Column(Float, default=0.0)
     subtotal = Column(Float, default=0.0)
+    item_name = Column(String, nullable=True)
     start_time = Column(DateTime(timezone=True), nullable=True)
     end_time = Column(DateTime(timezone=True), nullable=True)
+    service_id = Column(Integer, ForeignKey("services.id"), nullable=True)
 
     orden = relationship("Orden", back_populates="details")
 
@@ -377,6 +464,7 @@ class Purchase(Base):
     subtotal = Column(Float, default=0.0)
     tax = Column(Float, default=0.0)  # 16% IVA
     total = Column(Float, default=0.0)
+    category = Column(String)
     status = Column(String, default="pending")  # pending, partial, paid, cancelled
 
     branch = relationship("Branch")
@@ -390,13 +478,18 @@ class PurchaseDetail(Base):
     id = Column(Integer, primary_key=True, index=True)
     purchase_id = Column(Integer, ForeignKey("purchases.id"), nullable=False)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=True)
+    consumable_id = Column(Integer, ForeignKey("consumables.id"), nullable=True)
+    item_type = Column(String, default="product") # product, consumable
     description = Column(String)  # In case it's not a generic product
     quantity = Column(Integer, default=1)
+    unit = Column(String)
     unit_cost = Column(Float, default=0.0)
+    sales_price = Column(Float, default=0.0)
     subtotal = Column(Float, default=0.0)
 
     purchase = relationship("Purchase", back_populates="details")
     product = relationship("Product")
+    consumable = relationship("Consumable")
 
 
 class Expense(Base):
@@ -407,12 +500,14 @@ class Expense(Base):
     date = Column(DateTime(timezone=True), server_default=func.now())
     amount = Column(Float, nullable=False)
     exchange_rate = Column(Float, nullable=True)
-    exchange_currency = Column(String, default="usd")
+    exchange_currency = Column(String, default="eur")
     category = Column(String, nullable=False)
     description = Column(String)
     provider_id = Column(Integer, ForeignKey("providers.id"), nullable=True)
     provider = Column(String) # Legacy text field
     payment_method = Column(String, nullable=True)
+    subtotal = Column(Float, default=0.0)
+    tax = Column(Float, default=0.0)
 
     branch = relationship("Branch")
     provider_rel = relationship("Provider", back_populates="expenses")
@@ -428,16 +523,18 @@ class Receipt(Base):
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
     amount = Column(Float, nullable=False)
     exchange_rate = Column(Float, nullable=True)
-    exchange_currency = Column(String, default="usd")
+    exchange_currency = Column(String, default="eur")
     date = Column(DateTime(timezone=True), server_default=func.now())
     type = Column(String, default="income")  # income, expense
     payment_method = Column(String, nullable=False) # Cash, Zelle, Banesco (VE), etc.
     reference = Column(String)
+    igtf_amount = Column(Float, default=0.0)
 
     orden = relationship("Orden", back_populates="receipts")
     purchase = relationship("Purchase", back_populates="receipts")
     client = relationship("Client")
     branch = relationship("Branch")
+    cash_movements = relationship("CashMovement", back_populates="receipt", cascade="all, delete-orphan")
 
 
 # --- PROVIDERS MODULE ---
@@ -446,7 +543,7 @@ class Provider(Base):
     __tablename__ = "providers"
 
     id = Column(Integer, primary_key=True, index=True)
-    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
     name = Column(String, nullable=False, index=True)
     nit_ruc = Column(String, nullable=True)
     email = Column(String, nullable=True)
@@ -470,6 +567,9 @@ class Payable(Base):
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     reference = Column(String, nullable=True) # Invoice number / description
     amount = Column(Float, nullable=False)
+    exchange_rate = Column(Float, nullable=True)
+    exchange_currency = Column(String, default="eur")
+    category = Column(String)
     due_date = Column(DateTime(timezone=True), nullable=False)
     status = Column(String, default="pending") # pending, paid, cancelled
     expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True)
@@ -477,6 +577,8 @@ class Payable(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     paid_date = Column(DateTime(timezone=True), nullable=True)
     payment_method = Column(String, nullable=True)
+    subtotal = Column(Float, default=0.0)
+    tax = Column(Float, default=0.0)
 
     provider = relationship("Provider", back_populates="payables")
     branch = relationship("Branch")
@@ -490,7 +592,7 @@ class OrderAuditLog(Base):
     __tablename__ = "order_audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    orden_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
+    orden_id = Column(Integer, ForeignKey("orders.id", ondelete="SET NULL"), nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     action = Column(String, nullable=False) # modified, deleted, created
     reason = Column(String, nullable=True)
@@ -514,8 +616,10 @@ class Quote(Base):
     status = Column(String, default="draft", index=True)  # draft, sent, approved, rejected, converted
     subtotal = Column(Float, default=0.0)
     discount = Column(Float, default=0.0)  # Total discount amount
+    discount_type = Column(String, default="amount")  # amount | percentage
     tax = Column(Float, default=0.0)       # 16% IVA calculated
     total = Column(Float, default=0.0)
+    apply_tax = Column(Boolean, default=True)
     notes = Column(String, nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
     converted_order_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
@@ -536,10 +640,13 @@ class QuoteItem(Base):
     item_type = Column(String, nullable=False)   # product, room, office, custom
     item_id = Column(Integer, nullable=True)     # FK to the referenced entity
     description = Column(String, nullable=False) # Name/description (copied at time of quoting)
-    quantity = Column(Integer, default=1)
+    quantity = Column(Float, default=1.0)
     unit_price = Column(Float, default=0.0)
     discount = Column(Float, default=0.0)        # Per-item discount amount
     subtotal = Column(Float, default=0.0)
+    start_time = Column(DateTime(timezone=True), nullable=True)
+    end_time = Column(DateTime(timezone=True), nullable=True)
+    service_id = Column(Integer, ForeignKey("services.id"), nullable=True)
 
     quote = relationship("Quote", back_populates="items")
 
@@ -583,6 +690,8 @@ class CashMovement(Base):
     id = Column(Integer, primary_key=True, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     amount = Column(Float, nullable=False)
+    exchange_rate = Column(Float, nullable=True)
+    exchange_currency = Column(String, default="eur")
     type = Column(String, nullable=False)  # income, expense
     category = Column(String, nullable=False) # e.g. Petty Cash, Equity, Services
     description = Column(String)
@@ -590,8 +699,11 @@ class CashMovement(Base):
     client_name = Column(String, nullable=True)
     provider_name = Column(String, nullable=True)
     payment_method = Column(String, nullable=True)
+    igtf_amount = Column(Float, default=0.0)
+    receipt_id = Column(Integer, ForeignKey("receipts.id", ondelete="CASCADE"), nullable=True)
 
     branch = relationship("Branch")
+    receipt = relationship("Receipt", back_populates="cash_movements")
 
 class PaymentMethod(Base):
     __tablename__ = "payment_methods"
@@ -603,3 +715,11 @@ class PaymentMethod(Base):
     is_active = Column(Boolean, default=True)
 
     branch = relationship("Branch")
+
+class IdempotencyKey(Base):
+    __tablename__ = "idempotency_keys"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String, unique=True, index=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    request_path = Column(String, nullable=True)

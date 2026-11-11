@@ -15,8 +15,10 @@ import type {
     CashCategory,
     FinancialSummary,
     DashboardStats,
-    PaymentMethod
+    PaymentMethod,
+    ManagementDashboard
 } from '../types';
+import { v4 as uuidv4 } from 'uuid';
 
 const BASE = '/financial';
 
@@ -103,8 +105,15 @@ export const financialService = {
     },
 
     // ── ORDERS (ÓRDENES) ─────────────────────
-    getOrders: async (branchId?: number) => {
-        const res = await api.get<Orden[]>(`${BASE}/orders`, { params: { branch_id: branchId } });
+    getOrders: async (branchId?: number, search?: string, status?: string) => {
+        const params: any = { branch_id: branchId };
+        if (search) params.search = search;
+        if (status && status !== 'all') params.status = status;
+        const res = await api.get<Orden[]>(`${BASE}/orders`, { params });
+        return res.data;
+    },
+    getOrder: async (orderId: number) => {
+        const res = await api.get<Orden>(`${BASE}/orders/${orderId}`);
         return res.data;
     },
     createOrder: async (data: Partial<Orden>) => {
@@ -123,8 +132,10 @@ export const financialService = {
         const res = await api.get(`${BASE}/orders/${orderId}/logs`);
         return res.data;
     },
-    getClientStatement: async (clientId: number) => {
-        const res = await api.get<ClientStatement>(`${BASE}/clients/${clientId}/statement`);
+    getClientStatement: async (clientId: number, month?: number, year?: number) => {
+        const res = await api.get<ClientStatement>(`${BASE}/clients/${clientId}/statement`, {
+            params: { month, year }
+        });
         return res.data;
     },
 
@@ -157,7 +168,23 @@ export const financialService = {
         return res.data;
     },
     createReceipt: async (data: Partial<Receipt>) => {
-        const res = await api.post<Receipt>(`${BASE}/receipts`, data);
+        const res = await api.post<Receipt>(`${BASE}/receipts`, data, {
+            headers: { 'Idempotency-Key': uuidv4() }
+        });
+        return res.data;
+    },
+    createClientPayment: async (data: { 
+        client_id: number; 
+        amount: number; 
+        payment_method: string; 
+        reference?: string; 
+        igtf_amount?: number;
+        exchange_rate?: number;
+        exchange_currency?: string;
+    }) => {
+        const res = await api.post<Receipt[]>(`${BASE}/client-payments`, data, {
+            headers: { 'Idempotency-Key': uuidv4() }
+        });
         return res.data;
     },
 
@@ -200,7 +227,11 @@ export const financialService = {
         return res.data;
     },
     getDashboardStats: async (branchId?: number) => {
-        const res = await api.get<DashboardStats>(`${BASE}/dashboard-stats`, { params: { branch_id: branchId } });
+        const res = await api.get<DashboardStats>(`/dashboards/dashboard-stats`, { params: { branch_id: branchId } });
+        return res.data;
+    },
+    getManagementDashboard: async (month?: number, year?: number) => {
+        const res = await api.get<ManagementDashboard>(`/dashboards/management`, { params: { month, year } });
         return res.data;
     },
 

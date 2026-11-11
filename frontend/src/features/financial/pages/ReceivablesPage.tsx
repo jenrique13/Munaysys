@@ -65,8 +65,8 @@ const ReceivablesPage: React.FC = () => {
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
+                        <table className="min-w-full divide-y divide-gray-200 text-left">
+                            <thead className="bg-gray-50 hidden md:table-header-group">
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Última Venta</th>
@@ -74,10 +74,11 @@ const ReceivablesPage: React.FC = () => {
                                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                                 </tr>
                             </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
+                            <tbody className="bg-gray-50 md:bg-white flex flex-col md:table-row-group gap-4 md:gap-0 p-4 md:p-0 md:divide-y md:divide-gray-200">
                                 {filteredReceivables.map((r) => (
-                                    <tr key={r.client_id} className="hover:bg-gray-50 transition-colors group">
-                                        <td className="px-6 py-4 whitespace-nowrap">
+                                    <tr key={r.client_id} className="hover:bg-gray-50 transition-colors group flex flex-col md:table-row bg-white border md:border-0 border-gray-200 rounded-xl p-4 md:p-0 shadow-sm md:shadow-none">
+                                        <td className="px-0 py-2 md:px-6 md:py-4 md:whitespace-nowrap flex justify-between items-center md:table-cell border-b md:border-0 border-gray-100">
+                                            <span className="md:hidden font-bold text-xs text-gray-400 uppercase">Cliente</span>
                                             <div className="flex items-center">
                                                 <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-700 font-bold text-xs mr-3">
                                                     {r.client_name.substring(0, 2).toUpperCase()}
@@ -85,25 +86,29 @@ const ReceivablesPage: React.FC = () => {
                                                 <div className="text-sm font-medium text-gray-900">{r.client_name}</div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        <td className="px-0 py-2 md:px-6 md:py-4 md:whitespace-nowrap text-sm text-gray-500 flex justify-between items-center md:table-cell border-b md:border-0 border-gray-100">
+                                            <span className="md:hidden font-bold text-xs text-gray-400 uppercase">Última Venta</span>
                                             {r.last_order_date ? new Date(r.last_order_date).toLocaleDateString() : 'N/A'}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right">
-                                            <div className="text-sm font-bold text-red-600">
-                                                {formatCurrency(r.balance)}
-                                            </div>
-                                            {bcvRateUsd && (
-                                                <div className="text-xs text-red-400 font-medium mt-0.5">
-                                                    {formatBs(r.balance, bcvRateUsd)}
+                                        <td className="px-0 py-2 md:px-6 md:py-4 md:whitespace-nowrap text-right flex justify-between items-center md:table-cell border-b md:border-0 border-gray-100">
+                                            <span className="md:hidden font-bold text-xs text-gray-400 uppercase">Saldo Pendiente</span>
+                                            <div className="text-right md:text-right">
+                                                <div className="text-sm font-bold text-red-600">
+                                                    {formatCurrency(r.balance)}
                                                 </div>
-                                            )}
+                                                {bcvRateUsd && (
+                                                    <div className="text-xs text-red-400 font-medium mt-0.5">
+                                                        {formatBs(r.balance, bcvRateUsd)}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <td className="px-0 py-3 md:px-6 md:py-4 md:whitespace-nowrap text-right text-sm font-medium flex justify-end md:table-cell mt-2 md:mt-0">
                                             <button
                                                 onClick={() => navigate(`/billing?client_id=${r.client_id}`)}
-                                                className="inline-flex items-center text-indigo-600 hover:text-indigo-900 transition-colors"
+                                                className="inline-flex items-center text-indigo-600 hover:text-indigo-900 transition-colors w-full md:w-auto justify-end"
                                             >
-                                                Ver Estado <ArrowRight size={14} className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                Ver Estado <ArrowRight size={14} className="ml-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity" />
                                             </button>
                                         </td>
                                     </tr>

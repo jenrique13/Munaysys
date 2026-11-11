@@ -76,7 +76,7 @@
             text-align: right;
             white-space: nowrap;
         }
-        .currency-usd {
+        .currency-eur {
             font-weight: bold;
             display: block;
         }
@@ -117,8 +117,8 @@
 
     <div class="summary-card">
         <span class="summary-label">Total {{ report_type }}</span>
-        <strong>${{ "{:,.2f}".format(total_amount) }}</strong> 
-        <span style="color: #64748B; font-weight: normal;">(Bs {{ "{:,.2f}".format(total_amount * usd_rate) }})</span>
+        <strong>€{{ "{:,.2f}".format(total_amount) }}</strong> 
+        <span style="color: #64748B; font-weight: normal;">(Bs {{ "{:,.2f}".format(total_amount * eur_rate) }})</span>
         <br>
         <span style="font-size: 8.5pt; color: #94A3B8; margin-top: 4px; display: block;">{{ movements|length }} registros encontrados</span>
     </div>
@@ -143,16 +143,16 @@
                 <td>{{ m.entity_name }}</td>
                 <td>{{ m.payment_method }}</td>
                 <td class="amount-cell">
-                    <span class="currency-usd">${{ "{:,.2f}".format(m.amount) }}</span>
-                    <span class="currency-bs">Bs {{ "{:,.2f}".format(m.amount * usd_rate) }}</span>
+                    <span class="currency-eur">€{{ "{:,.2f}".format(m.amount) }}</span>
+                    <span class="currency-bs">Bs {{ "{:,.2f}".format(m.amount * eur_rate) }}</span>
                 </td>
             </tr>
             {% endfor %}
             <tr class="total-row">
                 <td colspan="5" style="text-align: right">TOTAL GENERAL</td>
                 <td class="amount-cell">
-                    <span class="currency-usd">${{ "{:,.2f}".format(total_amount) }}</span>
-                    <span class="currency-bs">Bs {{ "{:,.2f}".format(total_amount * usd_rate) }}</span>
+                    <span class="currency-eur">€{{ "{:,.2f}".format(total_amount) }}</span>
+                    <span class="currency-bs">Bs {{ "{:,.2f}".format(total_amount * eur_rate) }}</span>
                 </td>
             </tr>
         </tbody>

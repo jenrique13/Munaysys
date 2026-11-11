@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useDashboardStore } from '../hooks/useDashboardStore';
 import { useSystemStore } from '../../system/hooks/useSystemStore';
-import { formatCurrency, formatBs } from '../../../utils/format';
+import { formatCurrency, formatBs, formatMixedCurrency } from '../../../utils/format';
 import { Users, Landmark, Wallet, CalendarDays, TrendingUp, DollarSign, DoorOpen } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -10,7 +10,7 @@ import {
 
 export const DashboardPage: React.FC = () => {
     const { kpis, revenueTrend, occupancyStats, sedePerformance, isLoading, error, fetchDashboardData } = useDashboardStore();
-    const { bcvRateUsd } = useSystemStore();
+    const { bcvRateEur } = useSystemStore();
 
     useEffect(() => {
         fetchDashboardData();
@@ -76,8 +76,10 @@ export const DashboardPage: React.FC = () => {
                             </div>
                         </div>
                         <div className="flex items-baseline flex-wrap">
-                            <p className="text-2xl font-bold text-slate-800 mr-2">{formatCurrency(kpis.totalIncome)}</p>
-                            {bcvRateUsd && <p className="text-sm font-medium text-slate-500">{formatBs(kpis.totalIncome, bcvRateUsd)}</p>}
+                            <p className="text-2xl font-bold text-slate-800 mr-2">
+                                {formatMixedCurrency(kpis.totalIncomeEur, kpis.totalIncomeUsd)}
+                            </p>
+                            {bcvRateEur && <p className="text-sm font-medium text-slate-500">{formatBs(kpis.totalIncomeEur, bcvRateEur)}</p>}
                         </div>
                     </div>
 
@@ -90,21 +92,23 @@ export const DashboardPage: React.FC = () => {
                             </div>
                         </div>
                         <div className="flex items-baseline flex-wrap">
-                            <p className="text-2xl font-bold text-slate-800 mr-2">{formatCurrency(kpis.totalExpenses)}</p>
-                            {bcvRateUsd && <p className="text-sm font-medium text-slate-500">{formatBs(kpis.totalExpenses, bcvRateUsd)}</p>}
+                            <p className="text-2xl font-bold text-slate-800 mr-2">
+                                {formatMixedCurrency(kpis.totalExpensesEur, kpis.totalExpensesUsd)}
+                            </p>
+                            {bcvRateEur && <p className="text-sm font-medium text-slate-500">{formatBs(kpis.totalExpensesEur, bcvRateEur)}</p>}
                         </div>
                     </div>
 
                     {/* KPI 4 */}
                     <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
                         <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-slate-500">Reservas Activas (Hoy)</span>
+                            <span className="text-sm font-medium text-slate-500">Salas Ocupadas (Ahora)</span>
                             <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
                                 <CalendarDays size={16} />
                             </div>
                         </div>
                         <div className="flex items-baseline">
-                            <p className="text-2xl font-bold text-slate-800">{kpis.activeBookingsToday}</p>
+                            <p className="text-2xl font-bold text-slate-800">{kpis.currentlyOccupiedRooms}</p>
                         </div>
                     </div>
                 </div>
@@ -137,7 +141,7 @@ export const DashboardPage: React.FC = () => {
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
                                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dx={-10}
-                                    tickFormatter={(value: number) => `$${value >= 1000 ? (value / 1000).toFixed(1) + 'k' : value}`} />
+                                    tickFormatter={(value: number) => `€${value >= 1000 ? (value / 1000).toFixed(1) + 'k' : value}`} />
                                 <Tooltip
                                     contentStyle={{ borderRadius: '0.5rem', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                     formatter={(value: any) => [formatCurrency(Number(value || 0)), '']}
@@ -167,9 +171,13 @@ export const DashboardPage: React.FC = () => {
                                 <Tooltip
                                     cursor={{ fill: 'transparent' }}
                                     contentStyle={{ borderRadius: '0.5rem', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    formatter={(value: any) => [`${value || 0} Reservas`, '']}
+                                    formatter={(value: any, name: string | undefined) => [
+                                        name === 'Ocupación' ? `${value}%` : `${value} Reservas`, 
+                                        name || ''
+                                    ]}
                                 />
-                                <Bar dataKey="reservas" name="Reservas" fill="#8b5cf6" radius={[0, 4, 4, 0]} barSize={20} />
+                                <Bar dataKey="ocupacion" name="Ocupación" fill="#8b5cf6" radius={[0, 4, 4, 0]} barSize={15} />
+                                <Bar dataKey="reservas" name="Reservas" fill="#c4b5fd" radius={[0, 4, 4, 0]} barSize={8} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -215,9 +223,9 @@ export const DashboardPage: React.FC = () => {
                             <p className="text-slate-400 font-medium mb-1">Utilidad Operativa (Últimos 30 días)</p>
                             <div className="flex items-baseline flex-wrap">
                                 <h3 className="text-4xl font-bold tracking-tight mr-3">
-                                    {formatCurrency(kpis.profit)}
+                                    {formatMixedCurrency(kpis.profit, kpis.profitUsd)}
                                 </h3>
-                                {bcvRateUsd && <span className="text-xl font-medium text-slate-300">{formatBs(kpis.profit, bcvRateUsd)}</span>}
+                                {bcvRateEur && <span className="text-xl font-medium text-slate-300">{formatBs(kpis.profit, bcvRateEur)}</span>}
                             </div>
                         </div>
                         <div className="mt-4 md:mt-0 px-4 py-2 bg-white/10 rounded-lg backdrop-blur-sm border border-white/20 flex items-center">

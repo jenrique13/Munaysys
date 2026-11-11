@@ -189,3 +189,52 @@ thumb
 sketch
 
 # End of https://www.toptal.com/developers/gitignore/api/python,react
+
+### Munaysys Custom Ignores ###
+# Database backups and dumps
+*.sql
+*.dump
+*.db
+*.sqlite
+*.sqlite3
+
+# Archives and build artifacts
+*.zip
+*.tar.gz
+*.rar
+frontend/dist/
+frontend/dist.zip
+
+# Nested node_modules
+**/node_modules/
+
+# Environment files and credentials (keep .env.example only)
+.env
+.env.*
+!.env.example
+
+# Temporary and scratch directories
+tmp/
+scratch/
+backend/scratch/
+
+# Local audit logs, notes and personal vaults
+Auditoriav1.md
+ameliav1.md
+dapv1.md
+eduardov1.md
+jarvisv1.md
+karina.md
+Munaysys/
+Munaysys_Vault/
+implementation_plan_seguridad
+Notas Munaysys.txt
+config.txt
+*.csv
+
+# Temporary debug scripts and test outputs
+backend/debug_*.py
+backend/debug_*.txt
+backend/test_*.py
+backend/check_*.py
+test_*.py

@@ -11,6 +11,7 @@ import EspaciosPage from './features/operative/pages/EspaciosPage';
 import RoomsPage from './features/operative/pages/RoomsPage';
 import BookingsPage from './features/operative/pages/BookingsPage';
 import MembershipsPage from './features/operative/pages/MembershipsPage';
+import AmenityTemplatesPage from './features/operative/pages/AmenityTemplatesPage';
 import OrdersPage from './features/financial/pages/OrdersPage';
 import PurchasesPage from './features/financial/pages/PurchasesPage';
 import ExpensesPage from './features/financial/pages/ExpensesPage';
@@ -23,13 +24,16 @@ import ProductsPage from './features/financial/pages/ProductsPage';
 import ServicesPage from './features/financial/pages/ServicesPage';
 import ConsumablesPage from './features/financial/pages/ConsumablesPage';
 import ManagementPage from './features/management/pages/ManagementPage';
+import ManagementDashboardPage from './features/financial/pages/ManagementDashboardPage';
 import DashboardPage from './features/financial/pages/DashboardPage';
 import CatalogsPage from './features/financial/pages/CatalogsPage';
 import UsersPage from './features/configuration/pages/UsersPage';
 import RolesPage from './features/configuration/pages/RolesPage';
 import BranchesPage from './features/configuration/pages/BranchesPage';
+import ClientPortalPage from './features/configuration/pages/ClientPortalPage';
 import LoginPage from './features/auth/pages/LoginPage';
 import ReportesPage from './features/reports/pages/ReportesPage';
+import ExecutiveReportPage from './features/reports/pages/ExecutiveReportPage';
 import { useAuthStore } from './features/auth/hooks/useAuthStore';
 
 import { useSystemStore } from './features/system/hooks/useSystemStore';
@@ -91,6 +95,7 @@ function App() {
           <Route path="rooms" element={<RoomsPage />} />
           <Route path="bookings" element={<BookingsPage />} />
           <Route path="memberships" element={<MembershipsPage />} />
+          <Route path="amenity-templates" element={<AmenityTemplatesPage />} />
 
           {/* Financiero */}
           <Route path="dashboard" element={<DashboardPage />} />
@@ -113,14 +118,17 @@ function App() {
 
           {/* Gerencia */}
           <Route path="gerencia" element={<ManagementPage />} />
+          <Route path="management-dashboard" element={<ManagementDashboardPage />} />
 
           {/* Reportes */}
           <Route path="reportes" element={<ReportesPage />} />
+          <Route path="reportes-gerencia" element={<ExecutiveReportPage />} />
 
           {/* Gestión / Configuración */}
           <Route path="users" element={<UsersPage />} />
           <Route path="roles" element={<RolesPage />} />
           <Route path="branches" element={<BranchesPage />} />
+          <Route path="client-portal" element={<ClientPortalPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -8,7 +8,7 @@ interface QuotesState {
     error: string | null;
     lastConvertedOrderId: number | null;
 
-    fetchQuotes: (branchId?: number) => Promise<void>;
+    fetchQuotes: (branchId?: number, search?: string, status?: string) => Promise<void>;
     createQuote: (data: QuoteCreate) => Promise<Quote | null>;
     updateQuote: (id: number, data: QuoteUpdate) => Promise<Quote | null>;
     deleteQuote: (id: number) => Promise<boolean>;
@@ -24,10 +24,10 @@ export const useQuotesStore = create<QuotesState>((set) => ({
 
     clearConvertedOrder: () => set({ lastConvertedOrderId: null }),
 
-    fetchQuotes: async (branchId?: number) => {
+    fetchQuotes: async (branchId?: number, search?: string, status?: string) => {
         set({ isLoading: true, error: null });
         try {
-            const quotes = await quotesService.getAll(branchId);
+            const quotes = await quotesService.getAll(branchId, search, status);
             set({ quotes, isLoading: false });
         } catch (e: any) {
             set({ error: e.message || 'Error al cargar presupuestos', isLoading: false });
